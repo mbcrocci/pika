@@ -1,4 +1,4 @@
-module pika
+module github.com/mbcrocci/pika
 
 go 1.18
 

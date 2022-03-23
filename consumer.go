@@ -1,6 +1,8 @@
 package pika
 
 import (
+	"time"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -8,6 +10,9 @@ type ConsumerOptions struct {
 	Exchange  string
 	Topic     string
 	QueueName string
+
+	Retries       int // 0 -> will not queue for retry
+	RetryInterval time.Duration
 }
 
 type Consumer interface {

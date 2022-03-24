@@ -1,9 +1,6 @@
 package pika
 
-import (
-	"log"
-	"sync"
-)
+import	"sync"
 
 var minLength = 10
 
@@ -81,9 +78,7 @@ func (q *Queue[T]) Dequeue() *T {
 	q.c.L.Lock()
 
 	if q.count <= 0 {
-		log.Println("Waiting")
 		q.c.Wait()
-		log.Println("Done Waiting")
 	}
 
 	ret := q.buf[q.head]

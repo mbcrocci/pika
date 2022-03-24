@@ -40,8 +40,8 @@ func (r *Retrier) Retry(rm *RetryMessage) {
 
 func (r *Retrier) retryLoop() {
 	for {
-		rm, err := r.queue.Dequeue()
-		if err != nil {
+		rm := r.queue.Dequeue()
+		if rm == nil {
 			// should only error out if it's empty
 			time.Sleep(100 * time.Millisecond)
 			continue

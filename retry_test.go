@@ -9,10 +9,9 @@ import (
 type RetryTestConsumer struct{}
 
 func (RetryTestConsumer) Options() ConsumerOptions {
-	opts := ConsumerOptions{}
-	opts.WithRetry(10, 10*time.Millisecond)
-	return opts
+	return NewConsumerOptions("", "", "").WithRetry(10, 10*time.Millisecond)
 }
+
 func (RetryTestConsumer) HandleMessage(body []byte) error {
 	return errors.New("Test error")
 }

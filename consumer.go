@@ -16,9 +16,19 @@ type ConsumerOptions struct {
 	retryInterval time.Duration
 }
 
-func (co *ConsumerOptions) WithRetry(retries int, interval time.Duration) {
+func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
+	co := ConsumerOptions{}
+	co.Exchange = exchange
+	co.Topic = topic
+	co.QueueName = queue
+
+	return co
+}
+
+func (co ConsumerOptions) WithRetry(retries int, interval time.Duration) ConsumerOptions {
 	co.retries = retries
 	co.retryInterval = interval
+	return co
 }
 
 func (co ConsumerOptions) HasRetry() bool {

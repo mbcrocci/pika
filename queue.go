@@ -1,6 +1,6 @@
 package pika
 
-import	"sync"
+import "sync"
 
 var minLength = 10
 
@@ -72,6 +72,26 @@ func (q *Queue[T]) PeakAt(i int) *T {
 
 	j := (q.head+i)&len(q.buf) - 1
 	return q.buf[j]
+}
+
+func (q *Queue[T]) DequeueNoWait() *T {
+	q.c.L.Lock()
+	defer q.c.L.Unlock()
+
+	if q.count <= 0 {
+		return nil
+	}
+
+	ret := q.buf[q.head]
+	q.buf[q.head] = nil
+	q.head = (q.head + 1) & (len(q.buf) - 1)
+	q.count--
+
+	if len(q.buf) > minLength && (q.count<<2) == len(q.buf) {
+		q.resize()
+	}
+
+	return ret
 }
 
 func (q *Queue[T]) Dequeue() *T {

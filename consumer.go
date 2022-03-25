@@ -75,7 +75,7 @@ func (r *RabbitConnector) consumerHandler(consumer Consumer, channel *amqp.Chann
 
 		if err != nil && opts.HasRetry() {
 			log.Error(err)
-			r.retrier.Retry(consumer, d.Body, opts.retries, opts.retryInterval)
+			r.retrier.Retry(consumer, d.Body)
 			// Because the retrying is gonna be handled locally, tecnically the message is accepted instead of rejected
 		}
 

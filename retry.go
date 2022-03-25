@@ -24,21 +24,23 @@ func NewRetrier() *Retrier {
 	r := new(Retrier)
 	r.queue = NewQueue[Entry]()
 
-	return r
-}
-
-func (r *Retrier) Retry(consumer Consumer, msg []byte, retries int, interval time.Duration) {
-	e := new(Entry)
-	e.consumer = consumer
-	e.retries = retries
-	e.interval = interval
-	e.body = msg
-
 	go func() {
 		for {
 			r.retryNext()
 		}
 	}()
+
+	return r
+}
+
+func (r *Retrier) Retry(consumer Consumer, msg []byte) {
+	opts := consumer.Options()
+
+	e := new(Entry)
+	e.consumer = consumer
+	e.retries = opts.retries
+	e.interval = opts.retryInterval
+	e.body = msg
 
 	r.retry(e)
 }

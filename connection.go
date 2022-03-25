@@ -1,6 +1,8 @@
 package pika
 
 import (
+	"errors"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -11,11 +13,11 @@ type RabbitConnector struct {
 	retrier *Retrier
 }
 
-func NewConnector(url string) (*RabbitConnector, error) {
+func NewConnector() *RabbitConnector {
 	rc := new(RabbitConnector)
 	rc.retrier = NewRetrier()
 
-	return rc, nil
+	return rc
 }
 
 func (rc *RabbitConnector) Connect(url string) error {
@@ -31,9 +33,17 @@ func (rc *RabbitConnector) Connect(url string) error {
 }
 
 func (rc RabbitConnector) Disconnect() error {
+	if rc.conn == nil {
+		return errors.New("Connection is nil")
+	}
+
 	return rc.conn.Close()
 }
 
 func (rc RabbitConnector) Channel() (*amqp.Channel, error) {
+	if rc.conn == nil {
+		return nil, errors.New("Connection is nil")
+	}
+
 	return rc.conn.Channel()
 }

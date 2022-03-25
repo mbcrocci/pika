@@ -9,33 +9,34 @@ func TestQueue(t *testing.T) {
 	queue := NewQueue[int]()
 	done := make(chan bool)
 
+	first, second := 1, 2
+	queue.Queue(&first)
+	queue.Queue(&second)
+
+	// Test length
+	if queue.Length() != 2 {
+		t.Fail()
+	}
+
+	// Test FIFO
+	t_first, t_second := queue.Dequeue(), queue.Dequeue()
+	if first != *t_first || second != *t_second {
+		t.Fail()
+	}
+
+	// Test concurrency
 	go func() {
-		a := 1
-		b := 2
-		c := 3
+		a, b, c := 1, 2, 3
 
 		queue.Queue(&a)
 		queue.Queue(&b)
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		queue.Queue(&c)
 	}()
 
 	go func() {
-		a := queue.Dequeue()
-		if a == nil {
-			t.Log("A is nill")
-			t.Fail()
-		}
-
-		b := queue.Dequeue()
-		if b == nil {
-			t.Log("B is nill")
-			t.Fail()
-		}
-
-		c := queue.Dequeue()
-		if c == nil {
-			t.Log("C is nill")
+		a, b, c := queue.Dequeue(), queue.Dequeue(), queue.Dequeue()
+		if a == nil || b == nil || c == nil {
 			t.Fail()
 		}
 

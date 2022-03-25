@@ -3,67 +3,74 @@ package pika
 import (
 	"time"
 
-	"github.com/streadway/amqp"
+	log "github.com/sirupsen/logrus"
 )
 
-type RetryMessage struct {
-	Exchange string
-	Topic    string
-	Message  string
+type Entry struct {
+	consumer Consumer
 
-	Retries  int
-	Interval time.Duration
+	retries  int
+	count    int
+	interval time.Duration
 
-	count      int
-	last_retry time.Time
+	body []byte
 }
 
 type Retrier struct {
-	channel *amqp.Channel
-	queue   *Queue[RetryMessage]
+	queue *Queue[Entry]
 }
 
-func NewRetrier(c *amqp.Channel) *Retrier {
-	r := &Retrier{
-		channel: c,
-		queue:   NewQueue[RetryMessage](),
-	}
-
-	go r.retryLoop()
+func NewRetrier() *Retrier {
+	r := new(Retrier)
+	r.queue = NewQueue[Entry]()
 
 	return r
 }
 
-func (r *Retrier) Retry(rm *RetryMessage) {
-	r.queue.Queue(rm)
+func (r *Retrier) Retry(consumer Consumer, msg []byte, retries int, interval time.Duration) {
+	e := new(Entry)
+	e.consumer = consumer
+	e.retries = retries
+	e.interval = interval
+	e.body = msg
+
+	go func() {
+		for {
+			r.retryNext()
+		}
+	}()
+
+	r.retry(e)
 }
 
-func (r *Retrier) retryLoop() {
-	for {
-		rm := r.queue.Dequeue()
-		if rm == nil {
-			// should only error out if it's empty
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
+func (r *Retrier) retry(entry *Entry) {
+	// TODO this should not be done as "sleeping in a goroutine" to avoid polluting the heap/scheduler
+	go func() {
+		time.Sleep(entry.interval)
+		r.queue.Queue(entry)
+	}()
+}
 
-		if err := r.resendMessage(rm); err != nil {
-			rm.count++
-			if rm.count != rm.Retries {
-				r.queue.Queue(rm)
-			}
-		}
+func (r *Retrier) retryNext() {
+	entry := r.queue.Dequeue()
+	if entry == nil {
+		return
 	}
-}
 
-func (r *Retrier) resendMessage(rm *RetryMessage) error {
-	return r.channel.Publish(
-		rm.Exchange,
-		rm.Topic,
-		false, false,
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(rm.Message),
-		},
-	)
+	err := entry.consumer.HandleMessage(entry.body)
+	// Everthing went well so no need to retry again
+	if err == nil {
+		return
+	}
+
+	log.Error(err)
+	entry.count++
+
+	// Done with the retries
+	if entry.count == entry.retries {
+		return
+	}
+
+	// Requeue for further retries
+	r.retry(entry)
 }

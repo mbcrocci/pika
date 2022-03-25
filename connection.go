@@ -7,12 +7,15 @@ import (
 
 type RabbitConnector struct {
 	conn *amqp.Connection
+
+	retrier *Retrier
 }
 
 func NewConnector(url string) (*RabbitConnector, error) {
-	rc := &RabbitConnector{}
+	rc := new(RabbitConnector)
+	rc.retrier = NewRetrier()
 
-	return rc, rc.Connect(url)
+	return rc, nil
 }
 
 func (rc *RabbitConnector) Connect(url string) error {

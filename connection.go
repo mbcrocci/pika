@@ -9,14 +9,10 @@ import (
 
 type RabbitConnector struct {
 	conn *amqp.Connection
-
-	retrier *Retrier
 }
 
 func NewConnector() *RabbitConnector {
 	rc := new(RabbitConnector)
-	rc.retrier = NewRetrier()
-
 	return rc
 }
 

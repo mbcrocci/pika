@@ -1,10 +1,10 @@
 package pika
 
 import (
+	"encoding/json"
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
 )
 
 type ConsumerOptions struct {
@@ -14,6 +14,11 @@ type ConsumerOptions struct {
 
 	retries       int // 0 -> will not queue for retry
 	retryInterval time.Duration
+}
+
+type ConsumerRetry[T any] struct {
+	count int
+	msg   T
 }
 
 func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
@@ -35,12 +40,12 @@ func (co ConsumerOptions) HasRetry() bool {
 	return co.retries > 0
 }
 
-type Consumer interface {
+type Consumer[T any] interface {
 	Options() ConsumerOptions
-	HandleMessage([]byte) error
+	HandleMessage(T) error
 }
 
-func (r *RabbitConnector) StartConsumer(consumer Consumer) error {
+func StartConsumer[T any](consumer Consumer[T], r *RabbitConnector) error {
 	channel, err := r.Channel()
 	if err != nil {
 		return err
@@ -63,32 +68,54 @@ func (r *RabbitConnector) StartConsumer(consumer Consumer) error {
 		return err
 	}
 
-	go r.consumerHandler(consumer, channel, msgs)
+	go func() {
+		retryC := make(chan ConsumerRetry[T])
+		for {
+			select {
+			case msg := <-msgs:
+				var e T
+				if err := json.Unmarshal(msg.Body, &e); err != nil {
+					// Is not a type of message we want
+					channel.Reject(msg.DeliveryTag, msg.Redelivered)
+					log.Error(err)
 
-	log.WithFields(log.Fields{
-		"Exchange": opts.Exchange,
-		"Topic":    opts.Topic,
-	}).Info("Started Consumer")
+					continue
+				}
+
+				if err := consumer.HandleMessage(e); err != nil {
+					log.Error(err)
+
+					if opts.HasRetry() {
+						// If it can be retried it can enter a retry loop
+						// so no need for further checks
+						go retryMessage(e, opts.retryInterval, retryC)
+					} else {
+						channel.Reject(msg.DeliveryTag, msg.Redelivered)
+						continue
+					}
+				}
+
+				channel.Ack(msg.DeliveryTag, false)
+
+			case retryMsg := <-retryC:
+				err := consumer.HandleMessage(retryMsg.msg)
+				if err != nil {
+					retryMsg.count += 1
+					// TODO do some exponencial backoff on the interval
+
+					log.WithField("retries", retryMsg.count).Error(err)
+					if retryMsg.count < opts.retries {
+						go retryMessage(retryMsg.msg, opts.retryInterval, retryC)
+					}
+				}
+			}
+		}
+	}()
+
 	return nil
 }
 
-func (r *RabbitConnector) consumerHandler(consumer Consumer, channel *amqp.Channel, msgs <-chan amqp.Delivery) {
-	opts := consumer.Options()
-
-	for d := range msgs {
-		err := consumer.HandleMessage(d.Body)
-		if err != nil && !opts.HasRetry() {
-			log.Error(err)
-			channel.Reject(d.DeliveryTag, !d.Redelivered)
-			continue
-		}
-
-		if err != nil && opts.HasRetry() {
-			log.Error(err)
-			r.retrier.Retry(consumer, d.Body)
-			// Because the retrying is gonna be handled locally, tecnically the message is accepted instead of rejected
-		}
-
-		channel.Ack(d.DeliveryTag, false)
-	}
+func retryMessage[T any](msg T, interval time.Duration, c chan ConsumerRetry[T]) {
+	time.Sleep(interval)
+	c <- ConsumerRetry[T]{msg: msg}
 }

@@ -1,6 +1,7 @@
 package pika
 
 import (
+	"encoding/json"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -13,13 +14,13 @@ type NotificationOptions struct {
 	Interval time.Duration
 }
 
-type Notifier interface {
+type Notifier[T any] interface {
 	Options() NotificationOptions
 	Stop() bool
-	Notify() (string, error)
+	Notify() (T, error)
 }
 
-func (r *RabbitConnector) StartNotifier(notifier Notifier) error {
+func StartNotifier[T any](r *RabbitConnector, notifier Notifier[T]) error {
 	channel, err := r.Channel()
 	if err != nil {
 		return err
@@ -38,10 +39,16 @@ func (r *RabbitConnector) StartNotifier(notifier Notifier) error {
 	return nil
 }
 
-func notify(channel *amqp.Channel, notifier Notifier) {
+func notify[T any](channel *amqp.Channel, notifier Notifier[T]) {
 	options := notifier.Options()
 
 	msg, err := notifier.Notify()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	body, err := json.Marshal(msg)
 	if err != nil {
 		log.Error(err)
 		return
@@ -54,7 +61,7 @@ func notify(channel *amqp.Channel, notifier Notifier) {
 		false,
 		amqp.Publishing{
 			ContentType: "text/plain",
-			Body:        []byte(msg),
+			Body:        body,
 		},
 	)
 	if err != nil {
@@ -62,7 +69,7 @@ func notify(channel *amqp.Channel, notifier Notifier) {
 	}
 }
 
-func notifyLoop(channel *amqp.Channel, notifier Notifier) {
+func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T]) {
 	options := notifier.Options()
 
 	t := time.NewTicker(options.Interval)

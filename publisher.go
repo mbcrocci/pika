@@ -1,18 +1,27 @@
 package pika
 
-import "github.com/streadway/amqp"
+import (
+	"encoding/json"
+
+	"github.com/streadway/amqp"
+)
 
 type PublisherOptions struct {
 	Exchange string
 	Topic    string
 }
 
-type Publisher struct {
+type Publisher[T any] struct {
 	options PublisherOptions
 	channel *amqp.Channel
 }
 
-func (p Publisher) Publish(message string) error {
+func (p Publisher[T]) Publish(message T) error {
+	msg, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+
 	return p.channel.Publish(
 		p.options.Exchange,
 		p.options.Topic,
@@ -20,18 +29,18 @@ func (p Publisher) Publish(message string) error {
 		false,
 		amqp.Publishing{
 			ContentType: "text/plain",
-			Body:        []byte(message),
+			Body:        msg,
 		},
 	)
 }
 
-func (r *RabbitConnector) CreatePublisher(options PublisherOptions) (*Publisher, error) {
+func CreatePublisher[T any](r *RabbitConnector, options PublisherOptions) (*Publisher[T], error) {
 	channel, err := r.Channel()
 	if err != nil {
 		return nil, err
 	}
 
-	return &Publisher{
+	return &Publisher[T]{
 		options: options,
 		channel: channel,
 	}, nil

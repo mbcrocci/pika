@@ -13,8 +13,9 @@ type RabbitConnector struct {
 	logger *zap.Logger
 }
 
-func NewConnector() *RabbitConnector {
+func NewConnector(logger *zap.Logger) *RabbitConnector {
 	rc := new(RabbitConnector)
+	rc.logger = logger
 	return rc
 }
 

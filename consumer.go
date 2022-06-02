@@ -3,8 +3,6 @@ package pika
 import (
 	"encoding/json"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 type ConsumerOptions struct {
@@ -80,6 +78,8 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 		return err
 	}
 
+	sugar := r.logger.Sugar()
+
 	go func() {
 		retryC := make(chan ConsumerRetry[T])
 		for {
@@ -89,13 +89,12 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 				if err := json.Unmarshal(msg.Body, &e); err != nil {
 					// Is not a type of message we want
 					channel.Reject(msg.DeliveryTag, msg.Redelivered)
-					log.Error(err)
-
+					sugar.Errorw("Failed to parse msg", "error", err)
 					continue
 				}
 
 				if err := consumer.HandleMessage(e); err != nil {
-					log.Error(err)
+					sugar.Errorw("Couldn't handle msg", "error", err)
 
 					if opts.HasRetry() {
 						// If it can be retried it can enter a retry loop
@@ -115,7 +114,7 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 					retryMsg.count += 1
 					// TODO do some exponencial backoff on the interval
 
-					log.WithField("retries", retryMsg.count).Error(err)
+					sugar.Errorw("Couldn't handle msg", "retries", retryMsg.count, "error", err)
 					if retryMsg.count < opts.retries {
 						go retryMessage(retryMsg.msg, opts.retryInterval, retryC)
 					}

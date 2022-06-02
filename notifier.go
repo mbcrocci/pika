@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 )
 
 type NotificationOptions struct {
@@ -26,31 +26,33 @@ func StartNotifier[T any](r *RabbitConnector, notifier Notifier[T]) error {
 		return err
 	}
 
-	notify(channel, notifier)
+	sugar := r.logger.Sugar()
 
-	go notifyLoop(channel, notifier)
+	notify(channel, notifier, sugar)
+
+	go notifyLoop(channel, notifier, sugar)
 
 	options := notifier.Options()
-	log.WithFields(log.Fields{
-		"Exchange": options.Exchange,
-		"Topic":    options.Topic,
-	}).Info("Started Notifier")
+	sugar.Infow("Started Notifier",
+		"Exchange", options.Exchange,
+		"Topic", options.Topic,
+	)
 
 	return nil
 }
 
-func notify[T any](channel *amqp.Channel, notifier Notifier[T]) {
+func notify[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
 	options := notifier.Options()
 
 	msg, err := notifier.Notify()
 	if err != nil {
-		log.Error(err)
+		sugar.Error(err)
 		return
 	}
 
 	body, err := json.Marshal(msg)
 	if err != nil {
-		log.Error(err)
+		sugar.Error(err)
 		return
 	}
 
@@ -65,11 +67,11 @@ func notify[T any](channel *amqp.Channel, notifier Notifier[T]) {
 		},
 	)
 	if err != nil {
-		log.Error(err)
+		sugar.Error(err)
 	}
 }
 
-func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T]) {
+func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
 	options := notifier.Options()
 
 	t := time.NewTicker(options.Interval)
@@ -80,6 +82,6 @@ func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T]) {
 			break
 		}
 
-		notify(channel, notifier)
+		notify(channel, notifier, sugar)
 	}
 }

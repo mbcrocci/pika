@@ -3,12 +3,14 @@ package pika
 import (
 	"errors"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 )
 
 type RabbitConnector struct {
 	conn *amqp.Connection
+
+	logger *zap.Logger
 }
 
 func NewConnector() *RabbitConnector {
@@ -23,7 +25,7 @@ func (rc *RabbitConnector) Connect(url string) error {
 	}
 
 	rc.conn = conn
-	log.Info("Connected to RabbitMQ")
+	rc.logger.Info("Connected to RabbitMQ")
 
 	return nil
 }

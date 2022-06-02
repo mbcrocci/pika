@@ -3,8 +3,11 @@ module github.com/mbcrocci/pika
 go 1.18
 
 require (
-	github.com/sirupsen/logrus v1.8.1
 	github.com/streadway/amqp v1.0.0
+	go.uber.org/zap v1.21.0
 )
 
-require golang.org/x/sys v0.0.0-20191026070338-33540a1f6037 // indirect
+require (
+	go.uber.org/atomic v1.9.0 // indirect
+	go.uber.org/multierr v1.8.0 // indirect
+)

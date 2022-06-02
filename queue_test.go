@@ -54,36 +54,24 @@ func BenchmarkEmptyDequeue(b *testing.B) {
 	}
 }
 
-func BenchmarkQueueNoWait(b *testing.B) {
+func setupQueue(n int) *Queue[int] {
 	queue := NewQueue[int]()
-	values := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	queue.buf = make([]*int, n)
+	queue.count = n
 
-	i := 0
+	return queue
+}
 
+func BenchmarkQueueNoWait(b *testing.B) {
+	queue := setupQueue(b.N)
 	for n := 0; n < b.N; n++ {
-		i++
-		if i == 10 {
-			i = 0
-		}
-
-		queue.Queue(&values[i])
 		queue.DequeueNoWait()
 	}
 }
 
 func BenchmarkQueue(b *testing.B) {
-	queue := NewQueue[int]()
-	values := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-
-	i := 0
-
+	queue := setupQueue(b.N)
 	for n := 0; n < b.N; n++ {
-		i++
-		if i == 10 {
-			i = 0
-		}
-
-		queue.Queue(&values[i])
 		queue.Dequeue()
 	}
 }

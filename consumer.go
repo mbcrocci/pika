@@ -12,6 +12,9 @@ type ConsumerOptions struct {
 	Topic     string
 	QueueName string
 
+	durableQueue    bool
+	autoDeleteQueue bool
+
 	retries       int // 0 -> will not queue for retry
 	retryInterval time.Duration
 }
@@ -27,6 +30,15 @@ func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
 	co.Topic = topic
 	co.QueueName = queue
 
+	co.durableQueue = false
+	co.autoDeleteQueue = true
+
+	return co
+}
+
+func (co ConsumerOptions) SetDurable() ConsumerOptions {
+	co.durableQueue = true
+	co.autoDeleteQueue = false
 	return co
 }
 
@@ -53,7 +65,7 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 
 	opts := consumer.Options()
 
-	_, err = channel.QueueDeclare(opts.QueueName, false, true, false, false, nil)
+	_, err = channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
 	if err != nil {
 		return err
 	}

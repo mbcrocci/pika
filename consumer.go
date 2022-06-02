@@ -45,7 +45,7 @@ type Consumer[T any] interface {
 	HandleMessage(T) error
 }
 
-func StartConsumer[T any](consumer Consumer[T], r *RabbitConnector) error {
+func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 	channel, err := r.Channel()
 	if err != nil {
 		return err

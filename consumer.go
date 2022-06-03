@@ -17,9 +17,9 @@ type ConsumerOptions struct {
 	retryInterval time.Duration
 }
 
-type ConsumerRetry[T any] struct {
-	count int
-	msg   T
+type Msg[T any] struct {
+	retryCount int
+	msg        T
 }
 
 func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
@@ -79,44 +79,40 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 	}
 
 	sugar := r.logger.Sugar()
+	innerMsgs := make(chan Msg[T])
+
+	// receiver
+	go func() {
+		for msg := range msgs {
+			var e T
+			if err := json.Unmarshal(msg.Body, &e); err != nil {
+				// Is not a type of message we want
+				channel.Reject(msg.DeliveryTag, msg.Redelivered)
+				sugar.Errorw("Failed to parse msg", "error", err)
+				continue
+			}
+
+			innerMsgs <- Msg[T]{msg: e}
+			channel.Ack(msg.DeliveryTag, false)
+		}
+	}()
+
+	// processor
 
 	go func() {
-		retryC := make(chan ConsumerRetry[T])
-		for {
-			select {
-			case msg := <-msgs:
-				var e T
-				if err := json.Unmarshal(msg.Body, &e); err != nil {
-					// Is not a type of message we want
-					channel.Reject(msg.DeliveryTag, msg.Redelivered)
-					sugar.Errorw("Failed to parse msg", "error", err)
-					continue
-				}
+		for msg := range innerMsgs {
+			err := consumer.HandleMessage(msg.msg)
+			if err != nil {
+				sugar.Errorw("Couldn't handle msg", "error", err)
 
-				if err := consumer.HandleMessage(e); err != nil {
-					sugar.Errorw("Couldn't handle msg", "error", err)
+				if opts.HasRetry() {
+					msg.retryCount += 1
 
-					if opts.HasRetry() {
-						// If it can be retried it can enter a retry loop
-						// so no need for further checks
-						go retryMessage(e, opts.retryInterval, retryC)
-					} else {
-						channel.Reject(msg.DeliveryTag, msg.Redelivered)
-						continue
-					}
-				}
-
-				channel.Ack(msg.DeliveryTag, false)
-
-			case retryMsg := <-retryC:
-				err := consumer.HandleMessage(retryMsg.msg)
-				if err != nil {
-					retryMsg.count += 1
-					// TODO do some exponencial backoff on the interval
-
-					sugar.Errorw("Couldn't handle msg", "retries", retryMsg.count, "error", err)
-					if retryMsg.count < opts.retries {
-						go retryMessage(retryMsg.msg, opts.retryInterval, retryC)
+					if msg.retryCount <= opts.retries {
+						go func(msg Msg[T]) {
+							time.Sleep(opts.retryInterval)
+							innerMsgs <- msg
+						}(msg)
 					}
 				}
 			}
@@ -124,9 +120,4 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 	}()
 
 	return nil
-}
-
-func retryMessage[T any](msg T, interval time.Duration, c chan ConsumerRetry[T]) {
-	time.Sleep(interval)
-	c <- ConsumerRetry[T]{msg: msg}
 }

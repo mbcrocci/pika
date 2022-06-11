@@ -8,18 +8,21 @@ import (
 	"go.uber.org/zap"
 )
 
+// NotificationOptions represents the behaviour of the `Notifier`
 type NotificationOptions struct {
 	Exchange string
 	Topic    string
 	Interval time.Duration
 }
 
+// Notifier is a `Publisher` that publish on a regular interval
 type Notifier[T any] interface {
 	Options() NotificationOptions
 	Stop() bool
 	Notify() (T, error)
 }
 
+// StartNotifier initiates the `Notifier` that will run in a goroutine
 func StartNotifier[T any](r *RabbitConnector, notifier Notifier[T]) error {
 	channel, err := r.Channel()
 	if err != nil {

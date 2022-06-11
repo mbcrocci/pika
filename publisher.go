@@ -6,16 +6,19 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// PublisherOptions specifies where a Publisher will publish messages
 type PublisherOptions struct {
 	Exchange string
 	Topic    string
 }
 
+// Publisher represents a specific msg that can be published
 type Publisher[T any] struct {
 	options PublisherOptions
 	channel *amqp.Channel
 }
 
+// Publish publishes the `message` on the specified exchange and queue
 func (p Publisher[T]) Publish(message T) error {
 	msg, err := json.Marshal(message)
 	if err != nil {
@@ -34,6 +37,7 @@ func (p Publisher[T]) Publish(message T) error {
 	)
 }
 
+// CreatePublisher creates a `Publisher`
 func CreatePublisher[T any](r *RabbitConnector, options PublisherOptions) (*Publisher[T], error) {
 	channel, err := r.Channel()
 	if err != nil {

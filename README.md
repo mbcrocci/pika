@@ -38,8 +38,8 @@ To receive messages from RabbitMQ create a `Consumer` of the underlying event ty
 
 ```go
 type MsgEvent struct {
-  Name string `json:"name
-  Age int `json:"age"`
+  Name string `json:"name"`
+  Age  int    `json:"age"`
 }
 
 type MsgConsumer struct {}
@@ -77,12 +77,7 @@ func (c MsgConsumer) Options() pika.ConsumerOptions {
     "", // Exchange
     "", // Topic / Routing-Key
     "", // Queue name (leave empty for random name)
-   )
-   
-   // Additional setting you can setup
-   
-   
-   .WithRetry(3, time.Minute)
+  )
 }
 ```
 
@@ -96,7 +91,6 @@ You can also retry messages. It will be done in memory instead of using a dead-l
 ```go
   return pika.NewConsumerOptions("", "", "").WithRetry(1, time.Second)
 ```
-
 
 ## Publisher
 

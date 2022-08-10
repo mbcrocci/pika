@@ -44,7 +44,7 @@ func StartNotifier[T any](r *RabbitConnector, notifier Notifier[T]) error {
 	return nil
 }
 
-func notify[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
+func notify[T any](c *Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
 	options := notifier.Options()
 
 	msg, err := notifier.Notify()
@@ -59,7 +59,7 @@ func notify[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.Sugar
 		return
 	}
 
-	err = channel.Publish(
+	err = c.channel.Publish(
 		options.Exchange,
 		options.Topic,
 		false,
@@ -74,7 +74,7 @@ func notify[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.Sugar
 	}
 }
 
-func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
+func notifyLoop[T any](c *Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
 	options := notifier.Options()
 
 	t := time.NewTicker(options.Interval)
@@ -85,6 +85,6 @@ func notifyLoop[T any](channel *amqp.Channel, notifier Notifier[T], sugar *zap.S
 			break
 		}
 
-		notify(channel, notifier, sugar)
+		notify(c, notifier, sugar)
 	}
 }

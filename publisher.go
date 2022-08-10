@@ -15,7 +15,7 @@ type PublisherOptions struct {
 // Publisher represents a specific msg that can be published
 type Publisher[T any] struct {
 	options PublisherOptions
-	channel *amqp.Channel
+	channel *Channel
 }
 
 // Publish publishes the `message` on the specified exchange and queue
@@ -25,7 +25,7 @@ func (p Publisher[T]) Publish(message T) error {
 		return err
 	}
 
-	return p.channel.Publish(
+	return p.channel.channel.Publish(
 		p.options.Exchange,
 		p.options.Topic,
 		false,

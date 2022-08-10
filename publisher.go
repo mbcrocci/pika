@@ -3,7 +3,7 @@ package pika
 import (
 	"encoding/json"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // PublisherOptions specifies where a Publisher will publish messages
@@ -15,7 +15,7 @@ type PublisherOptions struct {
 // Publisher represents a specific msg that can be published
 type Publisher[T any] struct {
 	options PublisherOptions
-	channel *amqp.Channel
+	channel *Channel
 }
 
 // Publish publishes the `message` on the specified exchange and queue
@@ -25,7 +25,7 @@ func (p Publisher[T]) Publish(message T) error {
 		return err
 	}
 
-	return p.channel.Publish(
+	return p.channel.channel.Publish(
 		p.options.Exchange,
 		p.options.Topic,
 		false,

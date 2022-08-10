@@ -3,7 +3,7 @@ package pika
 import (
 	"encoding/json"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // PublisherOptions specifies where a Publisher will publish messages

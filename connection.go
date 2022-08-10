@@ -3,7 +3,7 @@ package pika
 import (
 	"errors"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
 )
 

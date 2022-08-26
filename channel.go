@@ -6,30 +6,41 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+type Channel interface {
+	Consume(ConsumerOptions, chan any) error
+	Publish(PublisherOptions, []byte) error
+
+	Ack(uint64, bool)
+	Reject(uint64, bool)
+
+	Log(string)
+}
+
 // Wraps an amqp.Channel to handle reconnects
-type Channel struct {
+type AMQPChannel struct {
 	conn    *RabbitConnector
 	channel *amqp.Channel
 
 	consumer struct {
 		consuming bool
 		options   ConsumerOptions
-		delivery  chan amqp.Delivery
+		delivery  chan any
 	}
 	isPublisher bool
 }
 
-func newChannel(conn *RabbitConnector) (*Channel, error) {
-	c := &Channel{conn: conn}
-
-	conn.registerChannel(c)
+func NewAMQPChannel(conn *RabbitConnector) (*AMQPChannel, error) {
+	c := &AMQPChannel{conn: conn}
 
 	err := c.connect()
+	if err != nil {
+		return nil, err
+	}
 
-	return c, err
+	return c, nil
 }
 
-func (c *Channel) connect() error {
+func (c *AMQPChannel) connect() error {
 	ch, err := c.conn.createChannel()
 	if err != nil {
 		return err
@@ -37,14 +48,15 @@ func (c *Channel) connect() error {
 
 	c.channel = ch
 	go c.handleDisconnect()
+
 	if c.consumer.consuming {
-		c.consume(c.consumer.options, c.consumer.delivery)
+		c.Consume(c.consumer.options, c.consumer.delivery)
 	}
 
 	return nil
 }
 
-func (c *Channel) handleDisconnect() {
+func (c *AMQPChannel) handleDisconnect() {
 	closeChan := c.channel.NotifyClose(make(chan *amqp.Error, 1))
 	//cancelChan := c.channel.NotifyCancel(make(chan string, 1))
 
@@ -56,7 +68,7 @@ func (c *Channel) handleDisconnect() {
 	}
 }
 
-func (c *Channel) consume(opts ConsumerOptions, outMsgs chan amqp.Delivery) error {
+func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
 	c.consumer.consuming = true
 	c.consumer.options = opts
 	c.consumer.delivery = outMsgs
@@ -83,4 +95,31 @@ func (c *Channel) consume(opts ConsumerOptions, outMsgs chan amqp.Delivery) erro
 	}()
 
 	return nil
+}
+
+func (c *AMQPChannel) Publish(opts PublisherOptions, msg []byte) error {
+	c.channel.Publish(
+		opts.Exchange,
+		opts.Topic,
+		false,
+		false,
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        msg,
+		},
+	)
+
+	return nil
+}
+
+func (c *AMQPChannel) Ack(tag uint64, multiple bool) {
+	c.channel.Ack(tag, multiple)
+}
+
+func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
+	c.channel.Reject(tag, requeue)
+}
+
+func (c *AMQPChannel) Log(msg string) {
+	c.conn.Log(msg)
 }

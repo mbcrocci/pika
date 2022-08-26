@@ -3,9 +3,6 @@ package pika
 import (
 	"encoding/json"
 	"time"
-
-	amqp "github.com/rabbitmq/amqp091-go"
-	"go.uber.org/zap"
 )
 
 // NotificationOptions represents the behaviour of the `Notifier`
@@ -23,58 +20,41 @@ type Notifier[T any] interface {
 }
 
 // StartNotifier initiates the `Notifier` that will run in a goroutine
-func StartNotifier[T any](r *RabbitConnector, notifier Notifier[T]) error {
+func StartNotifier[T any](r Connector, notifier Notifier[T]) error {
 	channel, err := r.Channel()
 	if err != nil {
 		return err
 	}
 
-	sugar := r.logger.Sugar()
+	err = notify(channel, notifier)
+	if err != nil {
+		r.Log("Unable to notify: " + err.Error())
+	}
 
-	notify(channel, notifier, sugar)
-
-	go notifyLoop(channel, notifier, sugar)
-
-	options := notifier.Options()
-	sugar.Infow("Started Notifier",
-		"Exchange", options.Exchange,
-		"Topic", options.Topic,
-	)
+	go notifyLoop(channel, notifier)
 
 	return nil
 }
 
-func notify[T any](c *Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
+func notify[T any](c Channel, notifier Notifier[T]) error {
 	options := notifier.Options()
 
 	msg, err := notifier.Notify()
 	if err != nil {
-		sugar.Error(err)
-		return
+		return err
 	}
 
 	body, err := json.Marshal(msg)
 	if err != nil {
-		sugar.Error(err)
-		return
+		return err
 	}
 
-	err = c.channel.Publish(
-		options.Exchange,
-		options.Topic,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
-		},
-	)
-	if err != nil {
-		sugar.Error(err)
-	}
+	opts := PublisherOptions{options.Exchange, options.Topic}
+
+	return c.Publish(opts, body)
 }
 
-func notifyLoop[T any](c *Channel, notifier Notifier[T], sugar *zap.SugaredLogger) {
+func notifyLoop[T any](c Channel, notifier Notifier[T]) {
 	options := notifier.Options()
 
 	t := time.NewTicker(options.Interval)
@@ -85,6 +65,9 @@ func notifyLoop[T any](c *Channel, notifier Notifier[T], sugar *zap.SugaredLogge
 			break
 		}
 
-		notify(c, notifier, sugar)
+		err := notify(c, notifier)
+		if err != nil {
+			c.Log("Unable to notify: " + err.Error())
+		}
 	}
 }

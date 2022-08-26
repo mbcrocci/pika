@@ -44,3 +44,26 @@ func TestRetries(t *testing.T) {
 		t.Log("Retry Count: ", rmsg.retryCount)
 	}
 }
+
+type TestConsumer struct{}
+
+func (c TestConsumer) Options() ConsumerOptions {
+	return NewConsumerOptions("", "", "")
+}
+
+func (c TestConsumer) HandleMessage(msg TestEvent) error {
+	return nil
+}
+
+func TestConsumerHandler(t *testing.T) {
+	c := &TestConnector{}
+	c.SetLogger(func(s string) { t.Log(s) })
+
+	tc := TestConsumer{}
+
+	err := StartConsumer[TestEvent](c, tc)
+	if err != nil {
+		t.Log(err)
+		t.FailNow()
+	}
+}

@@ -12,25 +12,40 @@ type Consumer[T any] interface {
 	HandleMessage(T) error
 }
 
-func consume[T any](msg amqp.Delivery) (T, error) {
+func consumeAmqp[T any](msg amqp.Delivery) (T, error) {
+	return consume[T](msg.Body)
+}
+
+func consume[T any](msg []byte) (T, error) {
 	var e T
-	err := json.Unmarshal(msg.Body, &e)
+	err := json.Unmarshal(msg, &e)
 
 	return e, err
 }
 
-func handle[T any](c *Channel, outterMsgs chan amqp.Delivery, innerMsgs chan Msg[T]) {
+func handle[T any](c Channel, outterMsgs chan any, innerMsgs chan Msg[T]) {
 	for msg := range outterMsgs {
-		e, err := consume[T](msg)
-		if err != nil {
-			// Is not a type of message we want
-			c.channel.Reject(msg.DeliveryTag, msg.Redelivered)
-			continue
-		}
+		switch m := msg.(type) {
+		case amqp.Delivery:
+			handleAmqp(c, m, innerMsgs)
 
-		innerMsgs <- Msg[T]{msg: e}
-		c.channel.Ack(msg.DeliveryTag, false)
+		case []byte:
+			t, _ := consume[T](m)
+			innerMsgs <- Msg[T]{msg: t}
+		}
 	}
+}
+
+func handleAmqp[T any](c Channel, msg amqp.Delivery, innerMsgs chan Msg[T]) {
+	e, err := consumeAmqp[T](msg)
+	if err != nil {
+		// Is not a type of message we want
+		c.Reject(msg.DeliveryTag, msg.Redelivered)
+		return
+	}
+
+	innerMsgs <- Msg[T]{msg: e}
+	c.Ack(msg.DeliveryTag, false)
 }
 
 func process[T any](msgs chan Msg[T], c Consumer[T]) {
@@ -38,10 +53,13 @@ func process[T any](msgs chan Msg[T], c Consumer[T]) {
 
 	for msg := range msgs {
 		err := c.HandleMessage(msg.msg)
-		if err != nil {
-			if opts.HasRetry() && msg.ShouldRetry(opts.retries) {
-				go msg.Retry(opts.retryInterval, msgs)
-			}
+
+		shouldRetry := err != nil &&
+			opts.HasRetry() &&
+			msg.ShouldRetry(opts.retries)
+
+		if shouldRetry {
+			msg.Retry(opts.retryInterval, msgs)
 		}
 	}
 }
@@ -50,7 +68,7 @@ func process[T any](msgs chan Msg[T], c Consumer[T]) {
 // It will spawn 2 goroutines to receive and process (with retries) messages.
 //
 // Everything will be handle with the options declared in the `Consumer` method `Options`
-func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
+func StartConsumer[T any](r Connector, consumer Consumer[T]) error {
 	channel, err := r.Channel()
 	if err != nil {
 		return err
@@ -58,12 +76,12 @@ func StartConsumer[T any](r *RabbitConnector, consumer Consumer[T]) error {
 
 	opts := consumer.Options()
 
-	outterMsgs := make(chan amqp.Delivery)
+	outterMsgs := make(chan any)
 	innerMsgs := make(chan Msg[T])
 
-	channel.consume(opts, outterMsgs)
+	channel.Consume(opts, outterMsgs)
 
-	go handle[T](channel, outterMsgs, innerMsgs)
+	go handle(channel, outterMsgs, innerMsgs)
 	go process(innerMsgs, consumer)
 
 	return nil

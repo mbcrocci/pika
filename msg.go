@@ -15,10 +15,10 @@ func (msg Msg[T]) ShouldRetry(retries int) bool {
 }
 
 // Retry increases inner counter and sleeps before sending itself back through msgs.
-// Use a goroutine!
 func (msg Msg[T]) Retry(backoff time.Duration, msgs chan Msg[T]) {
 	msg.retryCount += 1
 
-	time.Sleep(backoff)
-	msgs <- msg
+	time.AfterFunc(backoff, func() {
+		msgs <- msg
+	})
 }

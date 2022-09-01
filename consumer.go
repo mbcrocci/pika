@@ -12,27 +12,40 @@ type Consumer[T any] interface {
 	HandleMessage(T) error
 }
 
-func consume[T any](msg amqp.Delivery) (T, error) {
+func consumeAmqp[T any](msg amqp.Delivery) (T, error) {
+	return consume[T](msg.Body)
+}
+
+func consume[T any](msg []byte) (T, error) {
 	var e T
-	err := json.Unmarshal(msg.Body, &e)
+	err := json.Unmarshal(msg, &e)
 
 	return e, err
 }
 
 func handle[T any](c Channel, outterMsgs chan any, innerMsgs chan Msg[T]) {
 	for msg := range outterMsgs {
-		msg := msg.(amqp.Delivery)
+		switch m := msg.(type) {
+		case amqp.Delivery:
+			handleAmqp(c, m, innerMsgs)
 
-		e, err := consume[T](msg)
-		if err != nil {
-			// Is not a type of message we want
-			c.Reject(msg.DeliveryTag, msg.Redelivered)
-			continue
+		case []byte:
+			t, _ := consume[T](m)
+			innerMsgs <- Msg[T]{msg: t}
 		}
-
-		innerMsgs <- Msg[T]{msg: e}
-		c.Ack(msg.DeliveryTag, false)
 	}
+}
+
+func handleAmqp[T any](c Channel, msg amqp.Delivery, innerMsgs chan Msg[T]) {
+	e, err := consumeAmqp[T](msg)
+	if err != nil {
+		// Is not a type of message we want
+		c.Reject(msg.DeliveryTag, msg.Redelivered)
+		return
+	}
+
+	innerMsgs <- Msg[T]{msg: e}
+	c.Ack(msg.DeliveryTag, false)
 }
 
 func process[T any](msgs chan Msg[T], c Consumer[T]) {

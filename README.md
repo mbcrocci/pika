@@ -15,11 +15,9 @@ To connect to RabbitMQ create a new `RabbitConnector`
 
 ```go
 func main() {
-  logger, err := zap.NewProduction()
-  if err != nil { }
-  
-  conn := pika.NewConnector(logger)
-  if err := conn.Connect(RABBIT_URL); err != nil {
+  conn := pika.NewConnector()
+  err := conn.Connect(RABBIT_URL)
+  if err != nil {
     // TODO
   }
 }
@@ -56,13 +54,12 @@ func (c MsgConsumer) HandleMessage(e MsgEvent) error {
 Then start the consumer in you main file.
 ```go
 func main() {
-  //.. setup logger and connection
-  consumer := MsgConsumer{}
-  err := pika.StartConsumer[MsgEvent](conn, consumer)
-  if err != nil {
-    // TODO
-  }
-  
+    // ...
+
+    err := pika.StartConsumer[MsgEvent](conn, MsgConsumer{})
+    if err != nil {
+        // TODO
+    }
 }
 ```
 
@@ -115,3 +112,21 @@ type Notifier[T any] interface {
 	Notify() (T, error)
 }
 ```
+
+## PubSub
+If for testing or other use-cases you don't want to connect to a rabbitMq cluster,
+You can a PubSub which will handle all communication in memory.
+
+```go
+func main() {
+    pubsub := pika.NewPubSub()
+
+    publisher, _ := pika.CreatePublisher[MsgEvent](pubsub, PublisherOptions{"exchange", "topic"})
+    
+    pika.StartConsumer[MsgEvent](pubsub, YourConsumer{})
+
+    // ....
+}
+```
+
+As long as `YourConsumer` listens on the same exchange and topic it will receive every msg sent trough `publisher`.

@@ -46,7 +46,7 @@ func process[T any](msgs chan Msg[T], c Consumer[T]) {
 			msg.ShouldRetry(opts.retries)
 
 		if shouldRetry {
-			go msg.Retry(opts.retryInterval, msgs)
+			msg.Retry(opts.retryInterval, msgs)
 		}
 	}
 }

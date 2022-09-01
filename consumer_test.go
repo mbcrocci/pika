@@ -36,7 +36,7 @@ func TestRetries(t *testing.T) {
 	}
 
 	msgs := make(chan Msg[int])
-	go msg.Retry(opts.retryInterval, msgs)
+	msg.Retry(opts.retryInterval, msgs)
 
 	rmsg := <-msgs
 

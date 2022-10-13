@@ -77,6 +77,7 @@ func (rc *RabbitConnector) connect() error {
 	}
 
 	rc.info("Connected to RabbitMQ")
+	rc.debug("Connection string: " + rc.url)
 
 	go rc.handleDisconnect()
 

@@ -86,8 +86,8 @@ func StartConsumer[T any](r Connector, consumer Consumer[T]) error {
 
 	r.Logger().Info(
 		"consuming on queue ", opts.QueueName, ", ",
-		"connected to ", opts.Exchange, " exchange",
-		"with routing_key ", opts.Topic,
+		"connected to ", opts.Exchange, " exchange ",
+		"with topic ", opts.Topic,
 	)
 	return nil
 }

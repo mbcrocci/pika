@@ -84,5 +84,10 @@ func StartConsumer[T any](r Connector, consumer Consumer[T]) error {
 	go handle(channel, outterMsgs, innerMsgs)
 	go process(innerMsgs, consumer)
 
+	r.Logger().Info(
+		"consuming on queue ", opts.QueueName, ", ",
+		"connected to ", opts.Exchange, " exchange",
+		"with routing_key ", opts.Topic,
+	)
 	return nil
 }

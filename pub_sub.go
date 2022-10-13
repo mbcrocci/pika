@@ -33,9 +33,8 @@ func (p *PubSub) Channel() (Channel, error) {
 	return &c, nil
 }
 
-func (p *PubSub) SetLogger(l Logger) {
-	p.logger = l
-}
+func (p *PubSub) SetLogger(l Logger) { p.logger = l }
+func (p *PubSub) Logger() Logger     { return p.logger }
 
 func (p *PubSub) key(exchange, topic string) string {
 	return fmt.Sprintf("%s-%s", exchange, topic)
@@ -91,6 +90,4 @@ func (p *PubSubChannel) Publish(o PublisherOptions, data []byte) error {
 func (p *PubSubChannel) Ack(uint64, bool)    {}
 func (p *PubSubChannel) Reject(uint64, bool) {}
 
-// func (p *PubSubChannel) Log(s string) {
-// 	p.ps.logger(s)
-// }
+func (p *PubSubChannel) Logger() Logger { return p.ps.Logger() }

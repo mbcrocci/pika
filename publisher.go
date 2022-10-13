@@ -33,6 +33,11 @@ func CreatePublisher[T any](r Connector, options PublisherOptions) (*Publisher[T
 		return nil, err
 	}
 
+	r.Logger().Info(
+		"publishing on to ", options.Exchange, " exchange",
+		"with routing_key s", options.Topic,
+	)
+
 	return &Publisher[T]{
 		options: options,
 		channel: channel,

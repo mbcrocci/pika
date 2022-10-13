@@ -16,6 +16,7 @@ type Connector interface {
 	Channel() (Channel, error)
 
 	SetLogger(Logger)
+	Logger() Logger
 }
 
 type RabbitConnector struct {
@@ -30,9 +31,8 @@ func NewConnector() Connector {
 	return rc
 }
 
-func (rc *RabbitConnector) SetLogger(logger Logger) {
-	rc.logger = logger
-}
+func (rc *RabbitConnector) SetLogger(logger Logger) { rc.logger = logger }
+func (rc *RabbitConnector) Logger() Logger          { return rc.logger }
 
 func (rc *RabbitConnector) debug(msg string) {
 	if rc.logger != nil {

@@ -26,7 +26,7 @@ func (c *TestChannel) Publish(opts PublisherOptions, msg []byte) error {
 
 func (c *TestChannel) Ack(uint64, bool)    {}
 func (c *TestChannel) Reject(uint64, bool) {}
-func (c *TestChannel) Log(string)          {}
+func (c *TestChannel) Logger() Logger      { return nil }
 
 func TestChannelConsume(t *testing.T) {
 	type TMsg struct {

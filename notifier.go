@@ -33,6 +33,13 @@ func StartNotifier[T any](r Connector, notifier Notifier[T]) error {
 
 	go notifyLoop(channel, notifier)
 
+	o := notifier.Options()
+	r.Logger().Info(
+		"notifying to ", o.Exchange, " exchange",
+		"with routing_key ", o.Topic, " ",
+		"every ", o.Interval,
+	)
+
 	return nil
 }
 
@@ -65,9 +72,6 @@ func notifyLoop[T any](c Channel, notifier Notifier[T]) {
 			break
 		}
 
-		err := notify(c, notifier)
-		if err != nil {
-			// c.Error("Unable to notify: " + err.Error())
-		}
+		notify(c, notifier)
 	}
 }

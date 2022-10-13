@@ -12,6 +12,7 @@ func (c *TestConnector) Connect(url string) error  { return nil }
 func (c *TestConnector) Disconnect() error         { return nil }
 func (c *TestConnector) Channel() (Channel, error) { return &TestChannel{}, nil }
 func (c *TestConnector) SetLogger(f Logger)        { c.logF = f }
+func (c *TestConnector) Logger() Logger            { return c.logF }
 
 type TestEvent struct{}
 

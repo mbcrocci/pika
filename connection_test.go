@@ -5,22 +5,19 @@ import (
 )
 
 type TestConnector struct {
-	logF LogFunc
+	logF Logger
 }
 
 func (c *TestConnector) Connect(url string) error  { return nil }
 func (c *TestConnector) Disconnect() error         { return nil }
 func (c *TestConnector) Channel() (Channel, error) { return &TestChannel{}, nil }
-func (c *TestConnector) SetLogger(f LogFunc)       { c.logF = f }
-func (c *TestConnector) Log(msg string)            { c.logF(msg) }
+func (c *TestConnector) SetLogger(f Logger)        { c.logF = f }
 
 type TestEvent struct{}
 
 func TestConnectorMock(t *testing.T) {
 	c := &TestConnector{}
-	c.SetLogger(func(s string) {
-		t.Log(s)
-	})
+	c.SetLogger(testLogger{t: t})
 
 	consumer := TestConsumer{}
 

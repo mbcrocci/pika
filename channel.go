@@ -1,6 +1,7 @@
 package pika
 
 import (
+	"fmt"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -12,8 +13,6 @@ type Channel interface {
 
 	Ack(uint64, bool)
 	Reject(uint64, bool)
-
-	Log(string)
 }
 
 // Wraps an amqp.Channel to handle reconnects
@@ -53,6 +52,7 @@ func (c *AMQPChannel) connect() error {
 		c.Consume(c.consumer.options, c.consumer.delivery)
 	}
 
+	c.conn.info("channel connected")
 	return nil
 }
 
@@ -62,6 +62,7 @@ func (c *AMQPChannel) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
+		c.conn.warn("channel closed: " + e.Error())
 		for c.connect() != nil {
 			time.Sleep(5 * time.Second)
 		}
@@ -88,6 +89,7 @@ func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
 		return err
 	}
 
+	c.conn.info(fmt.Sprintf("consuming on {\"exchange\": %s, \"routing_key\": %s, \"queue\": %s}", opts.Exchange, opts.Topic, opts.QueueName))
 	go func() {
 		for msg := range msgs {
 			outMsgs <- msg
@@ -118,8 +120,4 @@ func (c *AMQPChannel) Ack(tag uint64, multiple bool) {
 
 func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
 	c.channel.Reject(tag, requeue)
-}
-
-func (c *AMQPChannel) Log(msg string) {
-	c.conn.Log(msg)
 }

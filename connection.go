@@ -15,15 +15,14 @@ type Connector interface {
 
 	Channel() (Channel, error)
 
-	SetLogger(LogFunc)
-	Log(string)
+	SetLogger(Logger)
 }
 
 type RabbitConnector struct {
 	url      string
 	conn     *amqp.Connection
 	channels []*AMQPChannel
-	logger   func(string)
+	logger   Logger
 }
 
 func NewConnector() Connector {
@@ -31,13 +30,32 @@ func NewConnector() Connector {
 	return rc
 }
 
-func (rc *RabbitConnector) SetLogger(logFunc LogFunc) {
-	rc.logger = logFunc
+func (rc *RabbitConnector) SetLogger(logger Logger) {
+	rc.logger = logger
 }
 
-func (rc *RabbitConnector) Log(msg string) {
+func (rc *RabbitConnector) debug(msg string) {
 	if rc.logger != nil {
-		rc.logger(msg)
+		rc.logger.Debug(msg)
+	}
+}
+
+func (rc *RabbitConnector) info(msg string) {
+
+	if rc.logger != nil {
+		rc.logger.Info(msg)
+	}
+}
+
+func (rc *RabbitConnector) warn(msg string) {
+	if rc.logger != nil {
+		rc.logger.Warn(msg)
+	}
+}
+
+func (rc *RabbitConnector) error(msg string) {
+	if rc.logger != nil {
+		rc.logger.Error(msg)
 	}
 }
 
@@ -58,7 +76,9 @@ func (rc *RabbitConnector) connect() error {
 		c.connect()
 	}
 
-	rc.Log("Connected to RabbitMQ")
+	rc.info("Connected to RabbitMQ")
+	rc.debug("Connection string: " + rc.url)
+
 	go rc.handleDisconnect()
 
 	return nil
@@ -69,6 +89,7 @@ func (rc RabbitConnector) Disconnect() error {
 		return errors.New("Connection is nil")
 	}
 
+	rc.info("Connection closed")
 	return rc.conn.Close()
 }
 
@@ -77,7 +98,7 @@ func (rc *RabbitConnector) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
-		rc.Log("Connection was closed: " + e.Error())
+		rc.warn("Connection was closed: " + e.Error())
 		for rc.connect() != nil {
 			time.Sleep(5 * time.Second)
 		}

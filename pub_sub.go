@@ -6,7 +6,7 @@ import (
 )
 
 type PubSub struct {
-	logger LogFunc
+	logger Logger
 	topics map[string][]chan []byte
 }
 
@@ -17,12 +17,12 @@ func NewPubSub() Connector {
 }
 
 func (p *PubSub) Connect(string) error {
-	p.Log("PubSub connected")
+	p.logger.Info("PubSub connected")
 	return nil
 }
 
 func (p *PubSub) Disconnect() error {
-	p.Log("PubSub disconnected")
+	p.logger.Info("PubSub disconnected")
 	return nil
 }
 
@@ -33,12 +33,8 @@ func (p *PubSub) Channel() (Channel, error) {
 	return &c, nil
 }
 
-func (p *PubSub) SetLogger(f LogFunc) {
-	p.logger = f
-}
-
-func (p *PubSub) Log(msg string) {
-	p.logger(msg)
+func (p *PubSub) SetLogger(l Logger) {
+	p.logger = l
 }
 
 func (p *PubSub) key(exchange, topic string) string {
@@ -95,6 +91,6 @@ func (p *PubSubChannel) Publish(o PublisherOptions, data []byte) error {
 func (p *PubSubChannel) Ack(uint64, bool)    {}
 func (p *PubSubChannel) Reject(uint64, bool) {}
 
-func (p *PubSubChannel) Log(s string) {
-	p.ps.logger(s)
-}
+// func (p *PubSubChannel) Log(s string) {
+// 	p.ps.logger(s)
+// }

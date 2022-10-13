@@ -57,7 +57,7 @@ func (c TestConsumer) HandleMessage(msg TestEvent) error {
 
 func TestConsumerHandler(t *testing.T) {
 	c := &TestConnector{}
-	c.SetLogger(func(s string) { t.Log(s) })
+	c.SetLogger(testLogger{t})
 
 	tc := TestConsumer{}
 

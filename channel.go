@@ -12,8 +12,6 @@ type Channel interface {
 
 	Ack(uint64, bool)
 	Reject(uint64, bool)
-
-	Log(string)
 }
 
 // Wraps an amqp.Channel to handle reconnects
@@ -118,8 +116,4 @@ func (c *AMQPChannel) Ack(tag uint64, multiple bool) {
 
 func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
 	c.channel.Reject(tag, requeue)
-}
-
-func (c *AMQPChannel) Log(msg string) {
-	c.conn.Log(msg)
 }

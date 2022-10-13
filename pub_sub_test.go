@@ -43,7 +43,7 @@ type testPubsubPublisherB struct{}
 
 func TestPubSub(t *testing.T) {
 	pubsub := NewPubSub()
-	pubsub.SetLogger(func(s string) { t.Log(s) })
+	pubsub.SetLogger(testLogger{t})
 
 	pubsub.Connect("")
 	defer pubsub.Disconnect()

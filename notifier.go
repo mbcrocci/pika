@@ -28,7 +28,7 @@ func StartNotifier[T any](r Connector, notifier Notifier[T]) error {
 
 	err = notify(channel, notifier)
 	if err != nil {
-		r.Log("Unable to notify: " + err.Error())
+		return err
 	}
 
 	go notifyLoop(channel, notifier)
@@ -67,7 +67,7 @@ func notifyLoop[T any](c Channel, notifier Notifier[T]) {
 
 		err := notify(c, notifier)
 		if err != nil {
-			c.Log("Unable to notify: " + err.Error())
+			// c.Error("Unable to notify: " + err.Error())
 		}
 	}
 }

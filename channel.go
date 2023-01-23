@@ -64,7 +64,8 @@ func (c *AMQPChannel) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
-		c.conn.warn("channel closed: " + e.Error())
+		c.Logger().Warn("channel was closed: " + e.Error())
+		c.Logger().Warn("attempting to reconnect: " + e.Error())
 		for c.connect() != nil {
 			time.Sleep(5 * time.Second)
 		}
@@ -72,15 +73,23 @@ func (c *AMQPChannel) handleDisconnect() {
 }
 
 func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
+	c.Logger().Info("creating consumer")
+	defer c.Logger().Info("consumer created")
+
 	c.consumer.consuming = true
 	c.consumer.options = opts
 	c.consumer.delivery = outMsgs
 
+	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
+	// So, the only way it can fail is if parameters do not match or is impossible
+	// to create queue.
+	// Therefore we can simply error out 
 	_, err := c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
 	if err != nil {
 		return err
 	}
 
+	// QueueBind only fails if there is a mismatch between the queue and  exchange
 	err = c.channel.QueueBind(opts.QueueName, opts.Topic, opts.Exchange, false, nil)
 	if err != nil {
 		return err
@@ -92,6 +101,8 @@ func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
 	}
 
 	go func() {
+		c.Logger().Info("consuming on", opts.QueueName)
+
 		for msg := range msgs {
 			outMsgs <- msg
 		}

@@ -28,36 +28,13 @@ type RabbitConnector struct {
 
 func NewConnector() Connector {
 	rc := new(RabbitConnector)
+	rc.logger = nullLogger{}
+
 	return rc
 }
 
 func (rc *RabbitConnector) SetLogger(logger Logger) { rc.logger = logger }
 func (rc *RabbitConnector) Logger() Logger          { return rc.logger }
-
-func (rc *RabbitConnector) debug(msg string) {
-	if rc.logger != nil {
-		rc.logger.Debug(msg)
-	}
-}
-
-func (rc *RabbitConnector) info(msg string) {
-
-	if rc.logger != nil {
-		rc.logger.Info(msg)
-	}
-}
-
-func (rc *RabbitConnector) warn(msg string) {
-	if rc.logger != nil {
-		rc.logger.Warn(msg)
-	}
-}
-
-func (rc *RabbitConnector) error(msg string) {
-	if rc.logger != nil {
-		rc.logger.Error(msg)
-	}
-}
 
 func (rc *RabbitConnector) Connect(url string) error {
 	rc.url = url
@@ -65,8 +42,11 @@ func (rc *RabbitConnector) Connect(url string) error {
 }
 
 func (rc *RabbitConnector) connect() error {
+	rc.logger.Info("connecting to RabbitMQ")
+
 	conn, err := amqp.Dial(rc.url)
 	if err != nil {
+		rc.logger.Error("unable to connect")
 		return err
 	}
 
@@ -75,9 +55,9 @@ func (rc *RabbitConnector) connect() error {
 	for _, c := range rc.channels {
 		c.connect()
 	}
-
-	rc.info("Connected to RabbitMQ")
-	rc.debug("Connection string: " + rc.url)
+	
+	rc.logger.Info("connected to RabbitMQ")
+	rc.logger.Debug("connection string", rc.url)
 
 	go rc.handleDisconnect()
 
@@ -89,7 +69,7 @@ func (rc RabbitConnector) Disconnect() error {
 		return errors.New("Connection is nil")
 	}
 
-	rc.info("Connection closed")
+	rc.logger.Info("disconnecting from RabbitMQ")
 	return rc.conn.Close()
 }
 
@@ -98,7 +78,8 @@ func (rc *RabbitConnector) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
-		rc.warn("Connection was closed: " + e.Error())
+		rc.logger.Warn("RabbitMQ connection was closed: " + e.Error())
+		rc.logger.Warn("attempting to reconnect")
 		for rc.connect() != nil {
 			time.Sleep(5 * time.Second)
 		}
@@ -120,7 +101,7 @@ func (rc *RabbitConnector) registerChannel(c *AMQPChannel) {
 
 func (rc *RabbitConnector) Channel() (Channel, error) {
 	if rc.conn == nil {
-		return nil, errors.New("Connection is nil")
+		return nil, errors.New("connection is nil")
 	}
 
 	c, err := NewAMQPChannel(rc)

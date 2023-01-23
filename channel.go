@@ -1,8 +1,6 @@
 package pika
 
 import (
-	"time"
-
 	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 )

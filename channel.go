@@ -3,6 +3,7 @@ package pika
 import (
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -20,6 +21,7 @@ type Channel interface {
 type AMQPChannel struct {
 	conn    *RabbitConnector
 	channel *amqp.Channel
+	closing bool
 
 	consumer struct {
 		consuming bool
@@ -65,10 +67,18 @@ func (c *AMQPChannel) handleDisconnect() {
 	e := <-closeChan
 	if e != nil {
 		c.Logger().Warn("channel was closed: " + e.Error())
-		c.Logger().Warn("attempting to reconnect: " + e.Error())
-		for c.connect() != nil {
-			time.Sleep(5 * time.Second)
+
+		// If the connection was closed channels will be notified of closing
+		// in that case no reconnect should happen
+		if c.closing {
+			return
 		}
+
+		c.Logger().Warn("attempting to reconnect: " + e.Error())
+		reconnect := func() error {
+			return c.connect()
+		}
+		backoff.Retry(reconnect, backoff.NewExponentialBackOff())
 	}
 }
 
@@ -83,7 +93,7 @@ func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
 	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
 	// So, the only way it can fail is if parameters do not match or is impossible
 	// to create queue.
-	// Therefore we can simply error out 
+	// Therefore we can simply error out
 	_, err := c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
 	if err != nil {
 		return err
@@ -132,4 +142,9 @@ func (c *AMQPChannel) Ack(tag uint64, multiple bool) {
 
 func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
 	c.channel.Reject(tag, requeue)
+}
+
+func (c *AMQPChannel) Close() error {
+	c.closing = true
+	return nil
 }

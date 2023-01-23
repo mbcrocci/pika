@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -55,7 +56,7 @@ func (rc *RabbitConnector) connect() error {
 	for _, c := range rc.channels {
 		c.connect()
 	}
-	
+
 	rc.logger.Info("connected to RabbitMQ")
 	rc.logger.Debug("connection string", rc.url)
 
@@ -79,10 +80,18 @@ func (rc *RabbitConnector) handleDisconnect() {
 	e := <-closeChan
 	if e != nil {
 		rc.logger.Warn("RabbitMQ connection was closed: " + e.Error())
-		rc.logger.Warn("attempting to reconnect")
-		for rc.connect() != nil {
-			time.Sleep(5 * time.Second)
+
+		rc.logger.Warn("closing all channels")
+		for _, c := range rc.channels {
+			c.Close()
 		}
+
+		reconnect := func() error {
+			rc.logger.Warn("attempting to reconnect")
+			return rc.connect()
+		}
+
+		backoff.Retry(reconnect, backoff.NewExponentialBackOff())
 	}
 }
 

@@ -1,12 +1,6 @@
 package pika
 
-import (
-	"strings"
-	"time"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-)
+import "time"
 
 // ConsumerOptions represents a queue binding for a Consumer
 type ConsumerOptions struct {
@@ -22,16 +16,6 @@ type ConsumerOptions struct {
 	retryInterval time.Duration
 }
 
-func defaultName(topic string) string {
-	words := strings.ReplaceAll(topic, ".", " ")
-
-	caser := cases.Title(language.English)
-	sentence := caser.String(words)
-
-	name := strings.ReplaceAll(sentence, " ", "")
-	return name + "Consumer"
-}
-
 // NewConsumerOptions creates a ConsumerOptions object with default configurations
 func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
 	co := ConsumerOptions{}
@@ -39,7 +23,7 @@ func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
 	co.Topic = topic
 	co.QueueName = queue
 
-	co.consumerName = defaultName(topic)
+	co.consumerName = ""
 	co.durableQueue = false
 	co.autoDeleteQueue = true
 

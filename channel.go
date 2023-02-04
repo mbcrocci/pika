@@ -9,7 +9,7 @@ import (
 type ChannelFactory func() (*amqp.Channel, error)
 
 // Wraps an amqp.Channel to handle reconnects
-type AMQPChannel struct {
+type amqpChannel struct {
 	channelF ChannelFactory
 	channel  *amqp.Channel
 	logger   Logger
@@ -23,8 +23,8 @@ type AMQPChannel struct {
 	delivery  <-chan amqp.Delivery
 }
 
-func NewAMQPChannel(chf ChannelFactory, l Logger, p Protocol) (*AMQPChannel, error) {
-	c := &AMQPChannel{
+func newAMQPChannel(chf ChannelFactory, l Logger, p Protocol) (*amqpChannel, error) {
+	c := &amqpChannel{
 		channelF: chf,
 		logger:   l,
 		protocol: p,
@@ -34,7 +34,7 @@ func NewAMQPChannel(chf ChannelFactory, l Logger, p Protocol) (*AMQPChannel, err
 	return c, nil
 }
 
-func (c *AMQPChannel) connect() error {
+func (c *amqpChannel) connect() error {
 	ch, err := c.channelF()
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func (c *AMQPChannel) connect() error {
 	return nil
 }
 
-func (c *AMQPChannel) handleDisconnect() {
+func (c *amqpChannel) handleDisconnect() {
 	closeChan := c.channel.NotifyClose(make(chan *amqp.Error, 1))
 	//cancelChan := c.channel.NotifyCancel(make(chan string, 1))
 
@@ -66,7 +66,7 @@ func (c *AMQPChannel) handleDisconnect() {
 	}
 }
 
-func (c *AMQPChannel) Publish(msg any, opts PublisherOptions) error {
+func (c *amqpChannel) Publish(msg any, opts PublishOptions) error {
 	data, err := c.protocol.Marshal(msg)
 	if err != nil {
 		return err
@@ -86,15 +86,15 @@ func (c *AMQPChannel) Publish(msg any, opts PublisherOptions) error {
 	return nil
 }
 
-func (c *AMQPChannel) Ack(tag uint64, multiple bool) {
+func (c *amqpChannel) Ack(tag uint64, multiple bool) {
 	c.channel.Ack(tag, multiple)
 }
 
-func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
+func (c *amqpChannel) Reject(tag uint64, requeue bool) {
 	c.channel.Reject(tag, requeue)
 }
 
-func (c *AMQPChannel) Close() error {
+func (c *amqpChannel) Close() error {
 	if !c.channel.IsClosed() {
 		err := c.channel.Close()
 		if err != nil {

@@ -6,61 +6,61 @@ import (
 	"fmt"
 )
 
-type PubSub struct {
+type pubSub struct {
 	logger Logger
 	topics map[string][]Consumer
 }
 
 func NewPubSub() Connector {
-	return &PubSub{
+	return &pubSub{
 		logger: &nullLogger{},
 		topics: make(map[string][]Consumer),
 	}
 }
 
-func (c *PubSub) WithLogger(l Logger) Connector {
+func (c *pubSub) WithLogger(l Logger) Connector {
 	c.logger = l
 	return c
 }
 
-func (c *PubSub) WithProtocol(p Protocol) Connector {
+func (c *pubSub) WithProtocol(p Protocol) Connector {
 	return c
 }
 
-func (c *PubSub) WithConsumers(n int) Connector {
+func (c *pubSub) WithConsumers(n int) Connector {
 	return c
 }
 
-func (c *PubSub) WithPublishers(n int) Connector {
+func (c *pubSub) WithPublishers(n int) Connector {
 	return c
 }
 
-func (p *PubSub) Connect(string) error {
+func (p *pubSub) Connect(string) error {
 	p.logger.Info("PubSub connected")
 	return nil
 }
 
-func (p *PubSub) Disconnect() error {
+func (p *pubSub) Disconnect() error {
 	p.logger.Info("PubSub disconnected")
 	return nil
 }
 
-func (p *PubSub) Consume(c Consumer, o ConsumerOptions) error {
+func (p *pubSub) Consume(c Consumer, o ConsumerOptions) error {
 	k := p.key(o.Exchange, o.Topic)
 	p.subscribe(k, c)
 	return nil
 }
 
-func (p *PubSub) Publish(data any, o PublisherOptions) error {
+func (p *pubSub) Publish(data any, o PublishOptions) error {
 	k := p.key(o.Exchange, o.Topic)
 	return p.broadcast(k, data)
 }
 
-func (p *PubSub) key(exchange, topic string) string {
+func (p *pubSub) key(exchange, topic string) string {
 	return fmt.Sprintf("%s-%s", exchange, topic)
 }
 
-func (p *PubSub) broadcast(k string, data any) error {
+func (p *pubSub) broadcast(k string, data any) error {
 	cs, ok := p.topics[k]
 	if !ok {
 		return errors.New("topic not found")
@@ -73,7 +73,7 @@ func (p *PubSub) broadcast(k string, data any) error {
 	return nil
 }
 
-func (p *PubSub) subscribe(k string, c Consumer) {
+func (p *pubSub) subscribe(k string, c Consumer) {
 	_, ok := p.topics[k]
 	if !ok {
 		p.topics[k] = make([]Consumer, 0)

@@ -15,7 +15,7 @@ type Consumer interface {
 // It will spawn 2 goroutines to receive and process (with retries) messages.
 //
 // Everything will be handle with the options declared in the `Consumer` method `Options`
-func (c *RabbitConnector) Consume(consumer Consumer, options ConsumerOptions) error {
+func (c *rabbitConnector) Consume(consumer Consumer, options ConsumerOptions) error {
 	channel, err := c.createChannel()
 	if err != nil {
 		return err
@@ -39,7 +39,7 @@ func (c *RabbitConnector) Consume(consumer Consumer, options ConsumerOptions) er
 	return nil
 }
 
-func (c *AMQPChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, error) {
+func (c *amqpChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, error) {
 	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
 	// So, the only way it can fail is if parameters do not match or is impossible
 	// to create queue.
@@ -58,7 +58,7 @@ func (c *AMQPChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, er
 	return c.channel.Consume(opts.QueueName, opts.consumerName, false, false, false, false, nil)
 }
 
-func (c *AMQPChannel) SetupConsume(opts ConsumerOptions) error {
+func (c *amqpChannel) SetupConsume(opts ConsumerOptions) error {
 	c.logger.Info("creating consumer")
 	defer c.logger.Info("consumer created")
 
@@ -75,7 +75,7 @@ func (c *AMQPChannel) SetupConsume(opts ConsumerOptions) error {
 	return nil
 }
 
-func (c *AMQPChannel) Consume(consumer Consumer, opts ConsumerOptions) {
+func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 	for msg := range c.delivery {
 		msg := msg
 

@@ -1,21 +1,16 @@
 package pika
 
 import (
-	"context"
 	"github.com/mitchellh/hashstructure/v2"
 )
 
-type Publisher interface {
-	Publish(ctx context.Context) any
-}
-
-// PublisherOptions specifies where a Publisher will publish messages
-type PublisherOptions struct {
+// PublishOptions specifies where to publish messages
+type PublishOptions struct {
 	Exchange string
 	Topic    string
 }
 
-func (r *RabbitConnector) Publish(msg any, opts PublisherOptions) error {
+func (r *rabbitConnector) Publish(msg any, opts PublishOptions) error {
 	hash, err := hashstructure.Hash(opts, hashstructure.FormatV2, nil)
 	if err != nil {
 		return err

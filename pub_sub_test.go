@@ -31,9 +31,6 @@ func (c *testPubsubConsumerB) HandleMessage(ctx context.Context, data any) error
 	return nil
 }
 
-type testPubsubPublisherA struct{}
-type testPubsubPublisherB struct{}
-
 func TestPubSub(t *testing.T) {
 	pubsub := pika.NewPubSub()
 
@@ -46,8 +43,8 @@ func TestPubSub(t *testing.T) {
 	pubsub.Consume(ca, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicA"})
 	pubsub.Consume(cb, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicB"})
 
-	pa := pika.PublisherOptions{Exchange: "exchange", Topic: "topicA"}
-	pb := pika.PublisherOptions{Exchange: "exchange", Topic: "topicB"}
+	pa := pika.PublishOptions{Exchange: "exchange", Topic: "topicA"}
+	pb := pika.PublishOptions{Exchange: "exchange", Topic: "topicB"}
 
 	pubsub.Publish(testPubSubEvent{"AAAAA"}, pa)
 	pubsub.Publish(testPubSubEvent{"AAAAA"}, pa)

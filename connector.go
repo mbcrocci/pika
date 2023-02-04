@@ -12,57 +12,57 @@ type Connector interface {
 	Disconnect() error
 
 	Consume(Consumer, ConsumerOptions) error
-	Publish(any, PublisherOptions) error
+	Publish(any, PublishOptions) error
 
 	WithLogger(Logger) Connector
 	WithProtocol(Protocol) Connector
 	WithConsumers(int) Connector
 }
 
-type RabbitConnector struct {
+type rabbitConnector struct {
 	url      string
 	logger   Logger
 	protocol Protocol
 	conn     *amqp.Connection
 
-	conChannels []*AMQPChannel
+	conChannels []*amqpChannel
 	conPool     *pool.Pool
-	pubChannels map[uint64]*AMQPChannel
+	pubChannels map[uint64]*amqpChannel
 	waitGroup   *conc.WaitGroup
 }
 
-func NewConnector() Connector {
-	return &RabbitConnector{
+func NewRabbitConnector() Connector {
+	return &rabbitConnector{
 		logger:      &nullLogger{},
 		protocol:    JsonProtocol{},
 		conPool:     pool.New(),
-		pubChannels: make(map[uint64]*AMQPChannel),
+		pubChannels: make(map[uint64]*amqpChannel),
 		waitGroup:   conc.NewWaitGroup(),
 	}
 }
 
-func (c *RabbitConnector) WithLogger(l Logger) Connector {
+func (c *rabbitConnector) WithLogger(l Logger) Connector {
 	c.logger = l
 	return c
 }
 
-func (c *RabbitConnector) WithProtocol(p Protocol) Connector {
+func (c *rabbitConnector) WithProtocol(p Protocol) Connector {
 	c.protocol = p
 	return c
 }
 
-func (c *RabbitConnector) WithConsumers(n int) Connector {
-	c.conChannels = make([]*AMQPChannel, 0)
+func (c *rabbitConnector) WithConsumers(n int) Connector {
+	c.conChannels = make([]*amqpChannel, 0)
 	c.conPool = pool.New().WithMaxGoroutines(n)
 	return c
 }
 
-func (c *RabbitConnector) Connect(url string) error {
+func (c *rabbitConnector) Connect(url string) error {
 	c.url = url
 	return c.connect()
 }
 
-func (rc *RabbitConnector) connect() error {
+func (rc *rabbitConnector) connect() error {
 	rc.logger.Info("connecting to RabbitMQ")
 
 	conn, err := amqp.Dial(rc.url)
@@ -83,7 +83,7 @@ func (rc *RabbitConnector) connect() error {
 	return nil
 }
 
-func (rc *RabbitConnector) handleDisconnect() {
+func (rc *rabbitConnector) handleDisconnect() {
 	closeChan := rc.conn.NotifyClose(make(chan *amqp.Error, 1))
 
 	e := <-closeChan
@@ -98,15 +98,15 @@ func (rc *RabbitConnector) handleDisconnect() {
 	}
 }
 
-func (c *RabbitConnector) registerConsumer(ch *AMQPChannel) {
+func (c *rabbitConnector) registerConsumer(ch *amqpChannel) {
 	c.conChannels = append(c.conChannels, ch)
 }
 
-func (c *RabbitConnector) registerPublisher(k uint64, ch *AMQPChannel) {
+func (c *rabbitConnector) registerPublisher(k uint64, ch *amqpChannel) {
 	c.pubChannels[k] = ch
 }
 
-func (c *RabbitConnector) connectConsumers() error {
+func (c *rabbitConnector) connectConsumers() error {
 	for _, ch := range c.conChannels {
 		err := ch.connect()
 		if err != nil {
@@ -116,7 +116,7 @@ func (c *RabbitConnector) connectConsumers() error {
 	return nil
 }
 
-func (c *RabbitConnector) connectPublishers() error {
+func (c *rabbitConnector) connectPublishers() error {
 	for _, ch := range c.pubChannels {
 		err := ch.connect()
 		if err != nil {
@@ -126,7 +126,7 @@ func (c *RabbitConnector) connectPublishers() error {
 	return nil
 }
 
-func (c *RabbitConnector) disconnectConsumers() {
+func (c *rabbitConnector) disconnectConsumers() {
 	for _, ch := range c.conChannels {
 		ch.Close()
 	}
@@ -134,13 +134,13 @@ func (c *RabbitConnector) disconnectConsumers() {
 	c.conPool.Wait()
 }
 
-func (c *RabbitConnector) disconnectPublishers() {
+func (c *rabbitConnector) disconnectPublishers() {
 	for _, ch := range c.pubChannels {
 		ch.Close()
 	}
 }
 
-func (c *RabbitConnector) Disconnect() error {
+func (c *rabbitConnector) Disconnect() error {
 	c.logger.Info("disconnecting from RabbitMQ")
 
 	c.disconnectConsumers()
@@ -149,8 +149,8 @@ func (c *RabbitConnector) Disconnect() error {
 	return c.conn.Close()
 }
 
-func (c *RabbitConnector) createChannel() (*AMQPChannel, error) {
-	ch, err := NewAMQPChannel(c.conn.Channel, c.logger, c.protocol)
+func (c *rabbitConnector) createChannel() (*amqpChannel, error) {
+	ch, err := newAMQPChannel(c.conn.Channel, c.logger, c.protocol)
 	if err != nil {
 		return nil, err
 	}

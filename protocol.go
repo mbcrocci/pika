@@ -22,4 +22,4 @@ func (p JsonProtocol) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-// TODO ProtocolBuffers 
+// TODO ProtocolBuffers

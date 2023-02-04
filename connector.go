@@ -23,6 +23,7 @@ type RabbitConnector struct {
 	logger   Logger
 	pool     *pool.Pool
 	protocol Protocol
+	pubChannels map[uint64]*AMQPChannel
 }
 
 func NewConnector() Connector {
@@ -31,6 +32,7 @@ func NewConnector() Connector {
 		protocol: JsonProtocol{},
 		channels: make([]*AMQPChannel, 0),
 		pool:     pool.New().WithMaxGoroutines(10),
+		pubChannels: make(map[uint64]*AMQPChannel),
 	}
 }
 

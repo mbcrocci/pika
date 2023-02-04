@@ -53,7 +53,7 @@ func (c *AMQPChannel) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
-		c.logger.Warn("channel was closed: " + e.Error())
+		c.logger.Warn("channel was closed:", e.Error())
 
 		// If the connection was closed channels will be notified of closing
 		// in that case no reconnect should happen
@@ -61,20 +61,25 @@ func (c *AMQPChannel) handleDisconnect() {
 			return
 		}
 
-		c.logger.Warn("attempting to reconnect: " + e.Error())
+		c.logger.Warn("attempting to reconnect...")
 		backoff.Retry(c.connect, backoff.NewExponentialBackOff())
 	}
 }
 
-func (c *AMQPChannel) Publish(opts PublisherOptions, msg []byte) error {
+func (c *AMQPChannel) Publish(msg any, opts PublisherOptions) error {
+	data, err := c.protocol.Marshal(msg)
+	if err != nil {
+		return err
+	}
+
 	c.channel.Publish(
 		opts.Exchange,
 		opts.Topic,
 		false,
 		false,
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        msg,
+			ContentType: c.protocol.ContentType(),
+			Body:        data,
 		},
 	)
 

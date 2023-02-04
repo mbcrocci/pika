@@ -2,6 +2,7 @@ package pika
 
 import (
 	"context"
+	"github.com/mitchellh/hashstructure/v2"
 )
 
 type Publisher interface {
@@ -15,17 +16,20 @@ type PublisherOptions struct {
 }
 
 func (r *RabbitConnector) Publish(msg any, opts PublisherOptions) error {
-	// TODO doens't make sense to create a channel everytime
-	//	maybe to this in a publishing pool
-	channel, err := r.createChannel()
+	hash, err := hashstructure.Hash(opts, hashstructure.FormatV2, nil)
 	if err != nil {
 		return err
 	}
 
-	data, err := r.protocol.Marshal(msg)
-	if err != nil {
-		return err
+	_, exists := r.pubChannels[hash]
+	if !exists {
+		ch, err := r.createChannel()
+		if err != nil {
+			return err
+		}
+
+		r.registerPublisher(hash, ch)
 	}
 
-	return channel.Publish(opts, data)
+	return r.pubChannels[hash].Publish(msg, opts)
 }

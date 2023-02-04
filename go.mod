@@ -6,6 +6,7 @@ require github.com/rabbitmq/amqp091-go v1.6.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.2.0
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/sourcegraph/conc v0.2.0
 )
 

@@ -2,7 +2,6 @@ package pika
 
 import (
 	"context"
-	"encoding/json"
 )
 
 type Publisher interface {
@@ -23,7 +22,7 @@ func (r *RabbitConnector) Publish(msg any, opts PublisherOptions) error {
 		return err
 	}
 
-	data, err := json.Marshal(msg)
+	data, err := r.protocol.Marshal(msg)
 	if err != nil {
 		return err
 	}

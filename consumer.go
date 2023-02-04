@@ -2,7 +2,6 @@ package pika
 
 import (
 	"context"
-	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -61,27 +60,27 @@ func (c *AMQPChannel) SetupConsume(opts ConsumerOptions) error {
 	c.logger.Info("creating consumer")
 	defer c.logger.Info("consumer created")
 
-	c.consumer.consuming = true
-	c.consumer.options = opts
+	c.consuming = true
+	c.options = opts
 
 	msgs, err := c.setupQueue(opts)
 	if err != nil {
 		return err
 	}
 
-	c.consumer.delivery = msgs
+	c.delivery = msgs
 
 	return nil
 }
 
 func (c *AMQPChannel) Consume(consumer Consumer, opts ConsumerOptions) {
-	for msg := range c.consumer.delivery {
+	for msg := range c.delivery {
 		msg := msg
 
 		c.pool.Go(func() {
-			// TODO extract to protocol plugin system
 			var data any
-			err := json.Unmarshal(msg.Body, &data)
+
+			err := c.protocol.Unmarshal(msg.Body, &data)
 			if err != nil {
 				c.logger.Error(err)
 				c.Reject(msg.DeliveryTag, false)

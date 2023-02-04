@@ -8,25 +8,24 @@ import (
 
 // Wraps an amqp.Channel to handle reconnects
 type AMQPChannel struct {
-	channel *amqp.Channel
-	logger  Logger
-	closing bool
+	channel  *amqp.Channel
+	logger   Logger
+	protocol Protocol
+	closing  bool
 
 	pool *pool.Pool
 
-	consumer struct {
-		consuming bool
-		options   ConsumerOptions
-		delivery  <-chan amqp.Delivery
-	}
-	isPublisher bool
+	consuming bool
+	options   ConsumerOptions
+	delivery  <-chan amqp.Delivery
 }
 
-func NewAMQPChannel(ch *amqp.Channel, l Logger) (*AMQPChannel, error) {
+func NewAMQPChannel(ch *amqp.Channel, l Logger, p Protocol) (*AMQPChannel, error) {
 	c := &AMQPChannel{
-		channel: ch,
-		logger:  l,
-		pool:    pool.New().WithMaxGoroutines(10),
+		channel:  ch,
+		logger:   l,
+		protocol: p,
+		pool:     pool.New().WithMaxGoroutines(10),
 	}
 
 	err := c.connect()

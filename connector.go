@@ -22,14 +22,26 @@ type RabbitConnector struct {
 	channels []*AMQPChannel
 	logger   Logger
 	pool     *pool.Pool
+	protocol Protocol
 }
 
 func NewConnector() Connector {
 	return &RabbitConnector{
 		logger:   &nullLogger{},
+		protocol: JsonProtocol{},
 		channels: make([]*AMQPChannel, 0),
 		pool:     pool.New().WithMaxGoroutines(10),
 	}
+}
+
+func (c *RabbitConnector) WithLogger(l Logger) Connector {
+	c.logger = l
+	return c
+}
+
+func (c *RabbitConnector) WithProtocol(p Protocol) Connector {
+	c.protocol = p
+	return c
 }
 
 func (c *RabbitConnector) Connect(url string) error {

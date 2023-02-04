@@ -95,6 +95,13 @@ func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
 }
 
 func (c *AMQPChannel) Close() error {
+	if !c.channel.IsClosed() {
+		err := c.channel.Close()
+		if err != nil {
+			return err
+		}
+	}
+
 	c.closing = true
 	c.pool.Wait()
 	return nil

@@ -21,12 +21,14 @@ func (c *RabbitConnector) Consume(consumer Consumer, options ConsumerOptions) er
 		return err
 	}
 
+	c.registerConsumer(channel)
+
 	err = channel.SetupConsume(options)
 	if err != nil {
 		return err
 	}
 
-	c.pool.Go(func() { channel.Consume(consumer, options) })
+	c.conPool.Go(func() { channel.Consume(consumer, options) })
 
 	c.logger.Info(
 		"consuming on queue ", options.QueueName, ", ",

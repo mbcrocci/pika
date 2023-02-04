@@ -1,10 +1,9 @@
 package pika
 
 import (
-	"errors"
-
 	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/sourcegraph/conc"
 	"github.com/sourcegraph/conc/pool"
 )
 
@@ -18,21 +17,23 @@ type Connector interface {
 
 type RabbitConnector struct {
 	url      string
-	conn     *amqp.Connection
-	channels []*AMQPChannel
 	logger   Logger
-	pool     *pool.Pool
 	protocol Protocol
+	conn     *amqp.Connection
+
+	conChannels []*AMQPChannel
+	conPool     *pool.Pool
 	pubChannels map[uint64]*AMQPChannel
+	waitGroup   *conc.WaitGroup
 }
 
 func NewConnector() Connector {
 	return &RabbitConnector{
-		logger:   &nullLogger{},
-		protocol: JsonProtocol{},
-		channels: make([]*AMQPChannel, 0),
-		pool:     pool.New().WithMaxGoroutines(10),
+		logger:      &nullLogger{},
+		protocol:    JsonProtocol{},
+		conPool:     pool.New(),
 		pubChannels: make(map[uint64]*AMQPChannel),
+		waitGroup:   conc.NewWaitGroup(),
 	}
 }
 
@@ -43,6 +44,12 @@ func (c *RabbitConnector) WithLogger(l Logger) Connector {
 
 func (c *RabbitConnector) WithProtocol(p Protocol) Connector {
 	c.protocol = p
+	return c
+}
+
+func (c *RabbitConnector) WithConsumers(n int) Connector {
+	c.conChannels = make([]*AMQPChannel, 0)
+	c.conPool = pool.New().WithMaxGoroutines(n)
 	return c
 }
 
@@ -62,15 +69,13 @@ func (rc *RabbitConnector) connect() error {
 
 	rc.conn = conn
 
-	for _, c := range rc.channels {
-		c.connect()
-	}
+	rc.connectConsumers()
+	rc.connectPublishers()
+
+	rc.waitGroup.Go(rc.handleDisconnect)
 
 	rc.logger.Info("connected to RabbitMQ")
 	rc.logger.Debug("connection string", rc.url)
-
-	rc.pool.Go(rc.handleDisconnect)
-
 	return nil
 }
 
@@ -82,20 +87,61 @@ func (rc *RabbitConnector) handleDisconnect() {
 		rc.logger.Warn("RabbitMQ connection was closed: " + e.Error())
 
 		rc.logger.Warn("closing all channels")
-		for _, c := range rc.channels {
-			c.Close()
-		}
+		rc.disconnectConsumers()
+		rc.disconnectPublishers()
 
 		backoff.Retry(rc.connect, backoff.NewExponentialBackOff())
 	}
 }
 
-func (c *RabbitConnector) Disconnect() error {
-	if c.conn == nil {
-		return errors.New("Connection is nil")
+func (c *RabbitConnector) registerConsumer(ch *AMQPChannel) {
+	c.conChannels = append(c.conChannels, ch)
+}
+
+func (c *RabbitConnector) registerPublisher(k uint64, ch *AMQPChannel) {
+	c.pubChannels[k] = ch
+}
+
+func (c *RabbitConnector) connectConsumers() error {
+	for _, ch := range c.conChannels {
+		err := ch.connect()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *RabbitConnector) connectPublishers() error {
+	for _, ch := range c.pubChannels {
+		err := ch.connect()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *RabbitConnector) disconnectConsumers() {
+	for _, ch := range c.conChannels {
+		ch.Close()
 	}
 
+	c.conPool.Wait()
+}
+
+func (c *RabbitConnector) disconnectPublishers() {
+	for _, ch := range c.pubChannels {
+		ch.Close()
+	}
+}
+
+func (c *RabbitConnector) Disconnect() error {
 	c.logger.Info("disconnecting from RabbitMQ")
+
+	c.disconnectConsumers()
+	c.disconnectPublishers()
+
 	return c.conn.Close()
 }
 

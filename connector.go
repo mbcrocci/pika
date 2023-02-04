@@ -98,17 +98,15 @@ func (c *RabbitConnector) Disconnect() error {
 }
 
 func (c *RabbitConnector) createChannel() (*AMQPChannel, error) {
-	channel, err := c.conn.Channel()
+	ch, err := NewAMQPChannel(c.conn.Channel, c.logger, c.protocol)
 	if err != nil {
 		return nil, err
 	}
 
-	ch, err := NewAMQPChannel(channel, c.logger)
+	err = ch.connect()
 	if err != nil {
 		return nil, err
 	}
-
-	c.channels = append(c.channels, ch)
 
 	return ch, nil
 }

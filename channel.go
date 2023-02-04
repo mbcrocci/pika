@@ -6,8 +6,11 @@ import (
 	"github.com/sourcegraph/conc/pool"
 )
 
+type ChannelFactory func() (*amqp.Channel, error)
+
 // Wraps an amqp.Channel to handle reconnects
 type AMQPChannel struct {
+	channelF ChannelFactory
 	channel  *amqp.Channel
 	logger   Logger
 	protocol Protocol
@@ -20,23 +23,25 @@ type AMQPChannel struct {
 	delivery  <-chan amqp.Delivery
 }
 
-func NewAMQPChannel(ch *amqp.Channel, l Logger, p Protocol) (*AMQPChannel, error) {
+func NewAMQPChannel(chf ChannelFactory, l Logger, p Protocol) (*AMQPChannel, error) {
 	c := &AMQPChannel{
-		channel:  ch,
+		channelF: chf,
 		logger:   l,
 		protocol: p,
 		pool:     pool.New().WithMaxGoroutines(10),
-	}
-
-	err := c.connect()
-	if err != nil {
-		return nil, err
 	}
 
 	return c, nil
 }
 
 func (c *AMQPChannel) connect() error {
+	ch, err := c.channelF()
+	if err != nil {
+		return err
+	}
+
+	c.channel = ch
+
 	c.pool.Go(c.handleDisconnect)
 
 	return nil

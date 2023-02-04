@@ -13,6 +13,10 @@ type Connector interface {
 
 	Consume(Consumer, ConsumerOptions) error
 	Publish(any, PublisherOptions) error
+
+	WithLogger(Logger) Connector
+	WithProtocol(Protocol) Connector
+	WithConsumers(int) Connector
 }
 
 type RabbitConnector struct {

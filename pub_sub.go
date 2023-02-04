@@ -18,6 +18,23 @@ func NewPubSub() Connector {
 	}
 }
 
+func (c *PubSub) WithLogger(l Logger) Connector {
+	c.logger = l
+	return c
+}
+
+func (c *PubSub) WithProtocol(p Protocol) Connector {
+	return c
+}
+
+func (c *PubSub) WithConsumers(n int) Connector {
+	return c
+}
+
+func (c *PubSub) WithPublishers(n int) Connector {
+	return c
+}
+
 func (p *PubSub) Connect(string) error {
 	p.logger.Info("PubSub connected")
 	return nil

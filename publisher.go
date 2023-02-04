@@ -1,8 +1,13 @@
 package pika
 
 import (
+	"context"
 	"encoding/json"
 )
+
+type Publisher interface {
+	Publish(ctx context.Context) any
+}
 
 // PublisherOptions specifies where a Publisher will publish messages
 type PublisherOptions struct {
@@ -10,36 +15,18 @@ type PublisherOptions struct {
 	Topic    string
 }
 
-// Publisher represents a specific msg that can be published
-type Publisher[T any] struct {
-	options PublisherOptions
-	channel Channel
-}
-
-// Publish publishes the `message` on the specified exchange and queue
-func (p Publisher[T]) Publish(message T) error {
-	msg, err := json.Marshal(message)
+func (r *RabbitConnector) Publish(msg any, opts PublisherOptions) error {
+	// TODO doens't make sense to create a channel everytime
+	//	maybe to this in a publishing pool
+	channel, err := r.createChannel()
 	if err != nil {
 		return err
 	}
 
-	return p.channel.Publish(p.options, msg)
-}
-
-// CreatePublisher creates a `Publisher`
-func CreatePublisher[T any](r Connector, options PublisherOptions) (*Publisher[T], error) {
-	channel, err := r.Channel()
+	data, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	r.Logger().Info(
-		"publishing on to ", options.Exchange, " exchange ",
-		"with topic ", options.Topic,
-	)
-
-	return &Publisher[T]{
-		options: options,
-		channel: channel,
-	}, nil
+	return channel.Publish(opts, data)
 }

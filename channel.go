@@ -3,34 +3,31 @@ package pika
 import (
 	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/sourcegraph/conc/pool"
 )
-
-type Channel interface {
-	Consume(ConsumerOptions, chan any) error
-	Publish(PublisherOptions, []byte) error
-
-	Ack(uint64, bool)
-	Reject(uint64, bool)
-
-	Logger() Logger
-}
 
 // Wraps an amqp.Channel to handle reconnects
 type AMQPChannel struct {
-	conn    *RabbitConnector
 	channel *amqp.Channel
+	logger  Logger
 	closing bool
+
+	pool *pool.Pool
 
 	consumer struct {
 		consuming bool
 		options   ConsumerOptions
-		delivery  chan any
+		delivery  <-chan amqp.Delivery
 	}
 	isPublisher bool
 }
 
-func NewAMQPChannel(conn *RabbitConnector) (*AMQPChannel, error) {
-	c := &AMQPChannel{conn: conn}
+func NewAMQPChannel(ch *amqp.Channel, l Logger) (*AMQPChannel, error) {
+	c := &AMQPChannel{
+		channel: ch,
+		logger:  l,
+		pool:    pool.New().WithMaxGoroutines(10),
+	}
 
 	err := c.connect()
 	if err != nil {
@@ -40,20 +37,8 @@ func NewAMQPChannel(conn *RabbitConnector) (*AMQPChannel, error) {
 	return c, nil
 }
 
-func (c *AMQPChannel) Logger() Logger { return c.conn.Logger() }
-
 func (c *AMQPChannel) connect() error {
-	ch, err := c.conn.createChannel()
-	if err != nil {
-		return err
-	}
-
-	c.channel = ch
-	go c.handleDisconnect()
-
-	if c.consumer.consuming {
-		c.Consume(c.consumer.options, c.consumer.delivery)
-	}
+	c.pool.Go(c.handleDisconnect)
 
 	return nil
 }
@@ -64,7 +49,7 @@ func (c *AMQPChannel) handleDisconnect() {
 
 	e := <-closeChan
 	if e != nil {
-		c.Logger().Warn("channel was closed: " + e.Error())
+		c.logger.Warn("channel was closed: " + e.Error())
 
 		// If the connection was closed channels will be notified of closing
 		// in that case no reconnect should happen
@@ -72,51 +57,9 @@ func (c *AMQPChannel) handleDisconnect() {
 			return
 		}
 
-		c.Logger().Warn("attempting to reconnect: " + e.Error())
-		reconnect := func() error {
-			return c.connect()
-		}
-		backoff.Retry(reconnect, backoff.NewExponentialBackOff())
+		c.logger.Warn("attempting to reconnect: " + e.Error())
+		backoff.Retry(c.connect, backoff.NewExponentialBackOff())
 	}
-}
-
-func (c *AMQPChannel) Consume(opts ConsumerOptions, outMsgs chan any) error {
-	c.Logger().Info("creating consumer")
-	defer c.Logger().Info("consumer created")
-
-	c.consumer.consuming = true
-	c.consumer.options = opts
-	c.consumer.delivery = outMsgs
-
-	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
-	// So, the only way it can fail is if parameters do not match or is impossible
-	// to create queue.
-	// Therefore we can simply error out
-	_, err := c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
-	if err != nil {
-		return err
-	}
-
-	// QueueBind only fails if there is a mismatch between the queue and  exchange
-	err = c.channel.QueueBind(opts.QueueName, opts.Topic, opts.Exchange, false, nil)
-	if err != nil {
-		return err
-	}
-
-	msgs, err := c.channel.Consume(opts.QueueName, opts.consumerName, false, false, false, false, nil)
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		c.Logger().Info("consuming on", opts.QueueName)
-
-		for msg := range msgs {
-			outMsgs <- msg
-		}
-	}()
-
-	return nil
 }
 
 func (c *AMQPChannel) Publish(opts PublisherOptions, msg []byte) error {
@@ -144,5 +87,6 @@ func (c *AMQPChannel) Reject(tag uint64, requeue bool) {
 
 func (c *AMQPChannel) Close() error {
 	c.closing = true
+	c.pool.Wait()
 	return nil
 }

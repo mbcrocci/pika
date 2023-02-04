@@ -1,8 +1,10 @@
-package pika
+package pika_test
 
 import (
+	"context"
 	"testing"
-	"time"
+
+	"github.com/mbcrocci/pika/v2"
 )
 
 type testPubSubEvent struct {
@@ -14,27 +16,18 @@ type testPubsubConsumerA struct {
 	msgsRead int
 }
 
-func (c *testPubsubConsumerA) Options() ConsumerOptions {
-	return NewConsumerOptions("exchange", "topicA", "")
-}
-func (c *testPubsubConsumerA) HandleMessage(e testPubSubEvent) error {
-	c.lastMsg = e.Msg
+func (c *testPubsubConsumerA) HandleMessage(ctx context.Context, data any) error {
+	c.lastMsg = data.(testPubSubEvent).Msg
 	c.msgsRead++
 	return nil
 }
 
 type testPubsubConsumerB struct {
 	lastMsg string
-	logger  LogFunc
 }
 
-func (c *testPubsubConsumerB) SetLogger(l LogFunc) { c.logger = l }
-
-func (c *testPubsubConsumerB) Options() ConsumerOptions {
-	return NewConsumerOptions("exchange", "topicB", "")
-}
-func (c *testPubsubConsumerB) HandleMessage(e testPubSubEvent) error {
-	c.lastMsg = e.Msg
+func (c *testPubsubConsumerB) HandleMessage(ctx context.Context, data any) error {
+	c.lastMsg = data.(testPubSubEvent).Msg
 	return nil
 }
 
@@ -42,8 +35,7 @@ type testPubsubPublisherA struct{}
 type testPubsubPublisherB struct{}
 
 func TestPubSub(t *testing.T) {
-	pubsub := NewPubSub()
-	pubsub.SetLogger(testLogger{t})
+	pubsub := pika.NewPubSub()
 
 	pubsub.Connect("")
 	defer pubsub.Disconnect()
@@ -51,23 +43,19 @@ func TestPubSub(t *testing.T) {
 	ca := &testPubsubConsumerA{}
 	cb := &testPubsubConsumerB{}
 
-	pa, _ := CreatePublisher[testPubSubEvent](pubsub, PublisherOptions{"exchange", "topicA"})
-	pb, _ := CreatePublisher[testPubSubEvent](pubsub, PublisherOptions{"exchange", "topicB"})
+	pubsub.Consume(ca, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicA"})
+	pubsub.Consume(cb, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicB"})
 
-	StartConsumer[testPubSubEvent](pubsub, ca)
-	StartConsumer[testPubSubEvent](pubsub, cb)
+	pa := pika.PublisherOptions{Exchange: "exchange", Topic: "topicA"}
+	pb := pika.PublisherOptions{Exchange: "exchange", Topic: "topicB"}
 
-	pa.Publish(testPubSubEvent{"AAAAA"})
-	pa.Publish(testPubSubEvent{"AAAAA"})
-	pa.Publish(testPubSubEvent{"AAAAA"})
+	pubsub.Publish(testPubSubEvent{"AAAAA"}, pa)
+	pubsub.Publish(testPubSubEvent{"AAAAA"}, pa)
+	pubsub.Publish(testPubSubEvent{"AAAAA"}, pa)
 
-	pb.Publish(testPubSubEvent{"BBBBB"})
-	pb.Publish(testPubSubEvent{"BBBBB"})
-	pb.Publish(testPubSubEvent{"BBBBB"})
-
-	// Because consumers do their job in a coroutine, we need to sleep a tiny bit to allow
-	// it to consume all events
-	time.Sleep(time.Millisecond)
+	pubsub.Publish(testPubSubEvent{"BBBBB"}, pb)
+	pubsub.Publish(testPubSubEvent{"BBBBB"}, pb)
+	pubsub.Publish(testPubSubEvent{"BBBBB"}, pb)
 
 	if ca.lastMsg != "AAAAA" {
 		t.Log(ca.lastMsg)
@@ -78,18 +66,4 @@ func TestPubSub(t *testing.T) {
 		t.Log(cb.lastMsg)
 		t.Fail()
 	}
-}
-
-func BenchmarkPubSub(b *testing.B) {
-	pubsub := NewPubSub()
-	ca := &testPubsubConsumerA{}
-	pa, _ := CreatePublisher[testPubSubEvent](pubsub, PublisherOptions{"exchange", "topicA"})
-	StartConsumer[testPubSubEvent](pubsub, ca)
-
-	for i := 0; i < b.N; i++ {
-		pa.Publish(testPubSubEvent{Msg: "static"})
-	}
-
-	// for ca.msgsRead < b.N {
-	// }
 }

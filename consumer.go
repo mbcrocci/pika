@@ -1,93 +1,101 @@
 package pika
 
 import (
+	"context"
 	"encoding/json"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // Consumer represents a RabbitMQ consumer for a typed `T` message
-type Consumer[T any] interface {
-	Options() ConsumerOptions
-	HandleMessage(T) error
-}
-
-func consumeAmqp[T any](msg amqp.Delivery) (T, error) {
-	return consume[T](msg.Body)
-}
-
-func consume[T any](msg []byte) (T, error) {
-	var e T
-	err := json.Unmarshal(msg, &e)
-
-	return e, err
-}
-
-func handle[T any](c Channel, outterMsgs chan any, innerMsgs chan Msg[T]) {
-	for msg := range outterMsgs {
-		switch m := msg.(type) {
-		case amqp.Delivery:
-			handleAmqp(c, m, innerMsgs)
-
-		case []byte:
-			t, _ := consume[T](m)
-			innerMsgs <- Msg[T]{msg: t}
-		}
-	}
-}
-
-func handleAmqp[T any](c Channel, msg amqp.Delivery, innerMsgs chan Msg[T]) {
-	e, err := consumeAmqp[T](msg)
-	if err != nil {
-		// Is not a type of message we want
-		c.Reject(msg.DeliveryTag, msg.Redelivered)
-		return
-	}
-
-	innerMsgs <- Msg[T]{msg: e}
-	c.Ack(msg.DeliveryTag, false)
-}
-
-func process[T any](msgs chan Msg[T], c Consumer[T]) {
-	opts := c.Options()
-
-	for msg := range msgs {
-		err := c.HandleMessage(msg.msg)
-
-		shouldRetry := err != nil &&
-			opts.HasRetry() &&
-			msg.ShouldRetry(opts.retries)
-
-		if shouldRetry {
-			msg.Retry(opts.retryInterval, msgs)
-		}
-	}
+type Consumer interface {
+	HandleMessage(context.Context, any) error
 }
 
 // StartConsumer makes the necessary declarations and bindings to start a consumer.
 // It will spawn 2 goroutines to receive and process (with retries) messages.
 //
 // Everything will be handle with the options declared in the `Consumer` method `Options`
-func StartConsumer[T any](r Connector, consumer Consumer[T]) error {
-	channel, err := r.Channel()
+func (c *RabbitConnector) Consume(consumer Consumer, options ConsumerOptions) error {
+	channel, err := c.createChannel()
 	if err != nil {
 		return err
 	}
 
-	opts := consumer.Options()
+	err = channel.SetupConsume(options)
+	if err != nil {
+		return err
+	}
 
-	outterMsgs := make(chan any)
-	innerMsgs := make(chan Msg[T])
+	c.pool.Go(func() { channel.Consume(consumer, options) })
 
-	channel.Consume(opts, outterMsgs)
-
-	go handle(channel, outterMsgs, innerMsgs)
-	go process(innerMsgs, consumer)
-
-	r.Logger().Info(
-		"consuming on queue ", opts.QueueName, ", ",
-		"connected to ", opts.Exchange, " exchange ",
-		"with topic ", opts.Topic,
+	c.logger.Info(
+		"consuming on queue ", options.QueueName, ", ",
+		"connected to ", options.Exchange, " exchange ",
+		"with topic ", options.Topic,
 	)
+
 	return nil
+}
+
+func (c *AMQPChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, error) {
+	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
+	// So, the only way it can fail is if parameters do not match or is impossible
+	// to create queue.
+	// Therefore we can simply error out
+	_, err := c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// QueueBind only fails if there is a mismatch between the queue and  exchange
+	err = c.channel.QueueBind(opts.QueueName, opts.Topic, opts.Exchange, false, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.channel.Consume(opts.QueueName, opts.consumerName, false, false, false, false, nil)
+}
+
+func (c *AMQPChannel) SetupConsume(opts ConsumerOptions) error {
+	c.logger.Info("creating consumer")
+	defer c.logger.Info("consumer created")
+
+	c.consumer.consuming = true
+	c.consumer.options = opts
+
+	msgs, err := c.setupQueue(opts)
+	if err != nil {
+		return err
+	}
+
+	c.consumer.delivery = msgs
+
+	return nil
+}
+
+func (c *AMQPChannel) Consume(consumer Consumer, opts ConsumerOptions) {
+	for msg := range c.consumer.delivery {
+		msg := msg
+
+		c.pool.Go(func() {
+			// TODO extract to protocol plugin system
+			var data any
+			err := json.Unmarshal(msg.Body, &data)
+			if err != nil {
+				c.logger.Error(err)
+				c.Reject(msg.DeliveryTag, false)
+				return
+			}
+
+			err = consumer.HandleMessage(context.TODO(), data)
+			if err != nil {
+				c.logger.Error(err)
+				c.Reject(msg.DeliveryTag, opts.HasRetry())
+				return
+			}
+
+			c.Ack(msg.DeliveryTag, false)
+		})
+	}
 }

@@ -1,45 +1,30 @@
 package pika
 
 import (
-	"encoding/json"
+	"github.com/mitchellh/hashstructure/v2"
 )
 
-// PublisherOptions specifies where a Publisher will publish messages
-type PublisherOptions struct {
+// PublishOptions specifies where to publish messages
+type PublishOptions struct {
 	Exchange string
 	Topic    string
 }
 
-// Publisher represents a specific msg that can be published
-type Publisher[T any] struct {
-	options PublisherOptions
-	channel Channel
-}
-
-// Publish publishes the `message` on the specified exchange and queue
-func (p Publisher[T]) Publish(message T) error {
-	msg, err := json.Marshal(message)
+func (r *rabbitConnector) Publish(msg any, opts PublishOptions) error {
+	hash, err := hashstructure.Hash(opts, hashstructure.FormatV2, nil)
 	if err != nil {
 		return err
 	}
 
-	return p.channel.Publish(p.options, msg)
-}
+	_, exists := r.pubChannels[hash]
+	if !exists {
+		ch, err := r.createChannel()
+		if err != nil {
+			return err
+		}
 
-// CreatePublisher creates a `Publisher`
-func CreatePublisher[T any](r Connector, options PublisherOptions) (*Publisher[T], error) {
-	channel, err := r.Channel()
-	if err != nil {
-		return nil, err
+		r.registerPublisher(hash, ch)
 	}
 
-	r.Logger().Info(
-		"publishing on to ", options.Exchange, " exchange ",
-		"with topic ", options.Topic,
-	)
-
-	return &Publisher[T]{
-		options: options,
-		channel: channel,
-	}, nil
+	return r.pubChannels[hash].Publish(msg, opts)
 }

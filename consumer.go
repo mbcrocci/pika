@@ -79,24 +79,25 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 	for msg := range c.delivery {
 		msg := msg
 
-		c.pool.Go(func() {
+		c.pool.Go(func(ctx context.Context) error {
 			var data any
 
 			err := c.protocol.Unmarshal(msg.Body, &data)
 			if err != nil {
 				c.logger.Error(err)
 				c.Reject(msg.DeliveryTag, false)
-				return
+				return err
 			}
 
-			err = consumer.HandleMessage(context.TODO(), data)
+			err = consumer.HandleMessage(ctx, data)
 			if err != nil {
 				c.logger.Error(err)
 				c.Reject(msg.DeliveryTag, opts.HasRetry())
-				return
+				return err
 			}
 
 			c.Ack(msg.DeliveryTag, false)
+			return nil
 		})
 	}
 }

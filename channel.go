@@ -1,6 +1,8 @@
 package pika
 
 import (
+	"context"
+
 	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/sourcegraph/conc/pool"
@@ -10,25 +12,29 @@ type ChannelFactory func() (*amqp.Channel, error)
 
 // Wraps an amqp.Channel to handle reconnects
 type amqpChannel struct {
+	ctx      context.Context
 	channelF ChannelFactory
 	channel  *amqp.Channel
 	logger   Logger
 	protocol Protocol
 	closing  bool
 
-	pool *pool.Pool
+	pool *pool.ContextPool
 
 	consuming bool
 	options   ConsumerOptions
 	delivery  <-chan amqp.Delivery
 }
 
-func newAMQPChannel(chf ChannelFactory, l Logger, p Protocol) (*amqpChannel, error) {
+func newAMQPChannel(ctx context.Context, chf ChannelFactory, l Logger, p Protocol) (*amqpChannel, error) {
 	c := &amqpChannel{
+		ctx:      ctx,
 		channelF: chf,
 		logger:   l,
 		protocol: p,
-		pool:     pool.New().WithMaxGoroutines(10),
+		pool: pool.New().
+			WithContext(ctx).
+			WithMaxGoroutines(10),
 	}
 
 	return c, nil
@@ -47,7 +53,7 @@ func (c *amqpChannel) connect() error {
 	return nil
 }
 
-func (c *amqpChannel) handleDisconnect() {
+func (c *amqpChannel) handleDisconnect(ctx context.Context) error {
 	closeChan := c.channel.NotifyClose(make(chan *amqp.Error, 1))
 	//cancelChan := c.channel.NotifyCancel(make(chan string, 1))
 
@@ -58,12 +64,14 @@ func (c *amqpChannel) handleDisconnect() {
 		// If the connection was closed channels will be notified of closing
 		// in that case no reconnect should happen
 		if c.closing {
-			return
+			return nil
 		}
 
 		c.logger.Warn("attempting to reconnect...")
-		backoff.Retry(c.connect, backoff.NewExponentialBackOff())
+		return backoff.Retry(c.connect, backoff.NewExponentialBackOff())
 	}
+
+	return nil
 }
 
 func (c *amqpChannel) Publish(msg any, opts PublishOptions) error {
@@ -72,7 +80,8 @@ func (c *amqpChannel) Publish(msg any, opts PublishOptions) error {
 		return err
 	}
 
-	c.channel.Publish(
+	c.channel.PublishWithContext(
+		c.ctx,
 		opts.Exchange,
 		opts.Topic,
 		false,

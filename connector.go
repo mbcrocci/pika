@@ -1,6 +1,8 @@
 package pika
 
 import (
+	"context"
+
 	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/sourcegraph/conc"
@@ -14,12 +16,14 @@ type Connector interface {
 	Consume(Consumer, ConsumerOptions) error
 	Publish(any, PublishOptions) error
 
+	WithContext(ctx context.Context) Connector
 	WithLogger(Logger) Connector
 	WithProtocol(Protocol) Connector
 	WithConsumers(int) Connector
 }
 
 type rabbitConnector struct {
+	ctx      context.Context
 	url      string
 	logger   Logger
 	protocol Protocol
@@ -33,12 +37,18 @@ type rabbitConnector struct {
 
 func NewRabbitConnector() Connector {
 	return &rabbitConnector{
+		ctx:         context.Background(),
 		logger:      &nullLogger{},
 		protocol:    JsonProtocol{},
 		conPool:     pool.New(),
 		pubChannels: make(map[uint64]*amqpChannel),
 		waitGroup:   conc.NewWaitGroup(),
 	}
+}
+
+func (c *rabbitConnector) WithContext(ctx context.Context) Connector {
+	c.ctx = ctx
+	return c
 }
 
 func (c *rabbitConnector) WithLogger(l Logger) Connector {
@@ -150,7 +160,7 @@ func (c *rabbitConnector) Disconnect() error {
 }
 
 func (c *rabbitConnector) createChannel() (*amqpChannel, error) {
-	ch, err := newAMQPChannel(c.conn.Channel, c.logger, c.protocol)
+	ch, err := newAMQPChannel(c.ctx, c.conn.Channel, c.logger, c.protocol)
 	if err != nil {
 		return nil, err
 	}

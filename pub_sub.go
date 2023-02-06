@@ -7,15 +7,22 @@ import (
 )
 
 type pubSub struct {
+	ctx    context.Context
 	logger Logger
 	topics map[string][]Consumer
 }
 
 func NewPubSub() Connector {
 	return &pubSub{
+		ctx:    context.Background(),
 		logger: &nullLogger{},
 		topics: make(map[string][]Consumer),
 	}
+}
+
+func (c *pubSub) WithContext(ctx context.Context) Connector {
+	c.ctx = ctx
+	return c
 }
 
 func (c *pubSub) WithLogger(l Logger) Connector {

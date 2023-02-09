@@ -39,7 +39,7 @@ func NewRabbitConnector() Connector {
 	return &rabbitConnector{
 		ctx:         context.Background(),
 		logger:      &nullLogger{},
-		protocol:    JsonProtocol{},
+		protocol:    &JsonProtocol{},
 		conPool:     pool.New(),
 		pubChannels: make(map[uint64]*amqpChannel),
 		waitGroup:   conc.NewWaitGroup(),

@@ -8,7 +8,7 @@ import (
 
 // Consumer represents a RabbitMQ consumer for a typed `T` message
 type Consumer interface {
-	HandleMessage(context.Context, any) error
+	HandleMessage(context.Context, Message) error
 }
 
 // StartConsumer makes the necessary declarations and bindings to start a consumer.
@@ -80,16 +80,15 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 		msg := msg
 
 		c.pool.Go(func(ctx context.Context) error {
-			var data any
-
-			err := c.protocol.Unmarshal(msg.Body, &data)
-			if err != nil {
-				c.logger.Error(err)
-				c.Reject(msg.DeliveryTag, false)
-				return err
+			msg := msg
+			data := Message{
+				protocol: c.protocol,
+				body: make([]byte, len(msg.Body)),
 			}
 
-			err = consumer.HandleMessage(ctx, data)
+			copy(data.body, msg.Body[:])
+
+			err := consumer.HandleMessage(ctx, data)
 			if err != nil {
 				c.logger.Error(err)
 				c.Reject(msg.DeliveryTag, opts.HasRetry())

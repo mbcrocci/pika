@@ -7,16 +7,18 @@ import (
 )
 
 type pubSub struct {
-	ctx    context.Context
-	logger Logger
-	topics map[string][]Consumer
+	ctx      context.Context
+	logger   Logger
+	protocol Protocol
+	topics   map[string][]Consumer
 }
 
 func NewPubSub() Connector {
 	return &pubSub{
-		ctx:    context.Background(),
-		logger: &nullLogger{},
-		topics: make(map[string][]Consumer),
+		ctx:      context.Background(),
+		logger:   &nullLogger{},
+		protocol: &JsonProtocol{},
+		topics:   make(map[string][]Consumer),
 	}
 }
 
@@ -73,8 +75,18 @@ func (p *pubSub) broadcast(k string, data any) error {
 		return errors.New("topic not found")
 	}
 
+	body, err := p.protocol.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	msg := Message{
+		protocol: p.protocol,
+		body:     body,
+	}
+
 	for _, c := range cs {
-		c.HandleMessage(context.TODO(), data)
+		c.HandleMessage(context.TODO(), msg)
 	}
 
 	return nil

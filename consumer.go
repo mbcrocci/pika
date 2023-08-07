@@ -81,12 +81,17 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 
 		c.pool.Go(func(ctx context.Context) error {
 			msg := msg
+			msgSize := len(msg.Body)
+
 			data := Message{
 				protocol: c.protocol,
-				body: make([]byte, len(msg.Body)),
+				body:     make([]byte, msgSize),
 			}
 
-			copy(data.body, msg.Body[:])
+			n := copy(data.body, msg.Body[:])
+			if n != msgSize {
+				c.logger.Warn("message size mismatch")
+			}
 
 			err := consumer.HandleMessage(ctx, data)
 			if err != nil {

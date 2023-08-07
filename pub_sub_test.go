@@ -16,8 +16,13 @@ type testPubsubConsumerA struct {
 	msgsRead int
 }
 
-func (c *testPubsubConsumerA) HandleMessage(ctx context.Context, data any) error {
-	c.lastMsg = data.(testPubSubEvent).Msg
+func (c *testPubsubConsumerA) HandleMessage(ctx context.Context, data pika.Message) error {
+	var msg testPubSubEvent
+	if err := data.Bind(&msg); err != nil {
+		return err
+	}
+
+	c.lastMsg = msg.Msg
 	c.msgsRead++
 	return nil
 }
@@ -26,8 +31,12 @@ type testPubsubConsumerB struct {
 	lastMsg string
 }
 
-func (c *testPubsubConsumerB) HandleMessage(ctx context.Context, data any) error {
-	c.lastMsg = data.(testPubSubEvent).Msg
+func (c *testPubsubConsumerB) HandleMessage(ctx context.Context, data pika.Message) error {
+	var msg testPubSubEvent
+	if err := data.Bind(&msg); err != nil {
+		return err
+	}
+	c.lastMsg = msg.Msg
 	return nil
 }
 

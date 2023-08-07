@@ -1,7 +1,5 @@
 package pika
 
-import "time"
-
 // ConsumerOptions represents a queue binding for a Consumer
 type ConsumerOptions struct {
 	Exchange  string
@@ -14,8 +12,7 @@ type ConsumerOptions struct {
 
 	prefetch int // 0 -> unlimited
 
-	retries       int // 0 -> will not queue for retry
-	retryInterval time.Duration
+	retry bool
 }
 
 // NewConsumerOptions creates a ConsumerOptions object with default configurations
@@ -47,15 +44,14 @@ func (co ConsumerOptions) SetPrefetch(n int) ConsumerOptions {
 }
 
 // WithRetry enables in memory retries of unhandled messages.
-// It will retry `retries` times waiting `interval` each time.
-func (co ConsumerOptions) WithRetry(retries int, interval time.Duration) ConsumerOptions {
-	co.retries = retries
-	co.retryInterval = interval
+// It will exponationally backoff for a max of 15min
+func (co ConsumerOptions) WithRetry() ConsumerOptions {
+	co.retry = true
 	return co
 }
 
 func (co ConsumerOptions) HasRetry() bool {
-	return co.retries > 0
+	return co.retry
 }
 
 // SetName sets the consumer name

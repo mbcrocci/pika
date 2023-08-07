@@ -3,6 +3,7 @@ package pika
 import (
 	"context"
 
+	"github.com/cenkalti/backoff/v4"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -101,8 +102,19 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 			err := consumer.HandleMessage(ctx, data)
 			if err != nil {
 				c.logger.Error(err)
-				c.Reject(msg.DeliveryTag, opts.HasRetry())
-				return err
+
+				if opts.HasRetry() {
+					c.pool.Go(func(ctx context.Context) error {
+						data := data
+
+						return backoff.Retry(
+							func() error { return consumer.HandleMessage(ctx, data) },
+							backoff.NewExponentialBackOff(),
+						)
+					})
+				} else {
+					c.Reject(msg.DeliveryTag, false)
+				}
 			}
 
 			c.Ack(msg.DeliveryTag, false)

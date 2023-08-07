@@ -49,6 +49,11 @@ func (c *amqpChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, er
 		return nil, err
 	}
 
+	err = c.channel.Qos(c.options.prefetch, 0, false)
+	if err != nil {
+		return nil, err
+	}
+
 	// QueueBind only fails if there is a mismatch between the queue and  exchange
 	err = c.channel.QueueBind(opts.QueueName, opts.Topic, opts.Exchange, false, nil)
 	if err != nil {

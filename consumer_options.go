@@ -12,6 +12,8 @@ type ConsumerOptions struct {
 	durableQueue    bool
 	autoDeleteQueue bool
 
+	prefetch int // 0 -> unlimited
+
 	retries       int // 0 -> will not queue for retry
 	retryInterval time.Duration
 }
@@ -34,6 +36,13 @@ func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
 func (co ConsumerOptions) SetDurable() ConsumerOptions {
 	co.durableQueue = true
 	co.autoDeleteQueue = false
+	return co
+}
+
+// SetPrefetch configures the prefetch count for the consumer.
+// Default is 0, which means unlimited.
+func (co ConsumerOptions) SetPrefetch(n int) ConsumerOptions {
+	co.prefetch = n
 	return co
 }
 

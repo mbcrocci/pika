@@ -87,6 +87,13 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 
 		c.pool.Go(func(ctx context.Context) error {
 			msg := msg
+
+			err := c.Ack(msg.DeliveryTag, false)
+			if err != nil {
+				c.logger.Error("failed to ack message", err)
+				return err
+			}
+
 			msgSize := len(msg.Body)
 
 			data := Message{
@@ -99,25 +106,29 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 				c.logger.Warn("message size mismatch")
 			}
 
-			err := consumer.HandleMessage(ctx, data)
+			err = consumer.HandleMessage(ctx, data)
 			if err != nil {
-				c.logger.Error(err)
-
 				if opts.HasRetry() {
+					c.logger.Info("retrying message", err)
+
 					c.pool.Go(func(ctx context.Context) error {
 						data := data
 
-						return backoff.Retry(
+						err := backoff.Retry(
 							func() error { return consumer.HandleMessage(ctx, data) },
 							backoff.NewExponentialBackOff(),
 						)
+						if err != nil {
+							c.logger.Error("unable to handle after retries", err)
+						}
+						return err
 					})
 				} else {
-					c.Reject(msg.DeliveryTag, false)
+					c.logger.Error("unable to handle message", err)
+					return err
 				}
 			}
 
-			c.Ack(msg.DeliveryTag, false)
 			return nil
 		})
 	}

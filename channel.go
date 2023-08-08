@@ -95,8 +95,8 @@ func (c *amqpChannel) Publish(msg any, opts PublishOptions) error {
 	return nil
 }
 
-func (c *amqpChannel) Ack(tag uint64, multiple bool) {
-	c.channel.Ack(tag, multiple)
+func (c *amqpChannel) Ack(tag uint64, multiple bool) error {
+	return c.channel.Ack(tag, multiple)
 }
 
 func (c *amqpChannel) Reject(tag uint64, requeue bool) {

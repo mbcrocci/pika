@@ -68,7 +68,13 @@ func (c *amqpChannel) handleDisconnect(ctx context.Context) error {
 		}
 
 		c.logger.Warn("attempting to reconnect...")
-		return backoff.Retry(c.connect, backoff.NewExponentialBackOff())
+		err := backoff.Retry(c.connect, backoff.NewExponentialBackOff())
+		if err != nil {
+			c.logger.Error("failed to reconnect after retries:", err)
+			return err
+		} else {
+			c.logger.Info("channel recconneted")
+		}
 	}
 
 	return nil

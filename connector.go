@@ -16,6 +16,9 @@ type Connector interface {
 	Consume(Consumer, ConsumerOptions) error
 	Publish(any, PublishOptions) error
 
+	RPCCall(string, any) (Message, error)
+	RPCRegister(RPCConsumer, ConsumerOptions) error
+
 	WithContext(ctx context.Context) Connector
 	WithLogger(Logger) Connector
 	WithProtocol(Protocol) Connector
@@ -33,6 +36,8 @@ type rabbitConnector struct {
 	conPool     *pool.Pool
 	pubChannels map[uint64]*amqpChannel
 	waitGroup   *conc.WaitGroup
+
+	rpc *rpcContext
 }
 
 func NewRabbitConnector() Connector {
@@ -85,6 +90,9 @@ func (rc *rabbitConnector) connect() error {
 
 	rc.connectConsumers()
 	rc.connectPublishers()
+	if rc.rpc != nil {
+		rc.rpc.channel.connect()
+	}
 
 	rc.waitGroup.Go(rc.handleDisconnect)
 
@@ -103,6 +111,9 @@ func (rc *rabbitConnector) handleDisconnect() {
 		rc.logger.Warn("closing all channels")
 		rc.disconnectConsumers()
 		rc.disconnectPublishers()
+		if rc.rpc != nil {
+			rc.rpc.channel.Close()
+		}
 
 		backoff.Retry(rc.connect, backoff.NewExponentialBackOff())
 	}
@@ -155,6 +166,9 @@ func (c *rabbitConnector) Disconnect() error {
 
 	c.disconnectConsumers()
 	c.disconnectPublishers()
+	if c.rpc != nil {
+		c.rpc.channel.Close()
+	}
 
 	return c.conn.Close()
 }

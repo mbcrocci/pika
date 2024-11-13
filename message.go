@@ -2,9 +2,11 @@ package pika
 
 type Message struct {
 	protocol Protocol
-	body        []byte
+	body     []byte
 
 	// TODO add tags
+	correlationID string
+	replyTo       string
 }
 
 func (m Message) Bind(v any) error {

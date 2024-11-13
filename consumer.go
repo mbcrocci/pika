@@ -17,18 +17,30 @@ type Consumer interface {
 //
 // Everything will be handle with the options declared in the `Consumer` method `Options`
 func (c *rabbitConnector) Consume(consumer Consumer, options ConsumerOptions) error {
-	channel, err := c.createChannel()
+	channel, err := c.prepareConsumer(options)
 	if err != nil {
 		return err
+	}
+	return c.consume(channel, consumer, options)
+}
+
+func (c *rabbitConnector) prepareConsumer(options ConsumerOptions) (*amqpChannel, error) {
+	channel, err := c.createChannel()
+	if err != nil {
+		return nil, err
 	}
 
 	c.registerConsumer(channel)
 
 	err = channel.SetupConsume(options)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	return channel, nil
+}
+
+func (c *rabbitConnector) consume(channel *amqpChannel, consumer Consumer, options ConsumerOptions) error {
 	c.conPool.Go(func() { channel.Consume(consumer, options) })
 
 	c.logger.Info(
@@ -41,11 +53,18 @@ func (c *rabbitConnector) Consume(consumer Consumer, options ConsumerOptions) er
 }
 
 func (c *amqpChannel) setupQueue(opts ConsumerOptions) (<-chan amqp.Delivery, error) {
+	err := c.channel.ExchangeDeclare(
+		opts.Exchange, "topic", true,
+		false, false, false, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	// Declare ensures the queue exists, ie. it either creates or check if parameters match.
 	// So, the only way it can fail is if parameters do not match or is impossible
 	// to create queue.
 	// Therefore we can simply error out
-	_, err := c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
+	_, err = c.channel.QueueDeclare(opts.QueueName, opts.durableQueue, opts.autoDeleteQueue, false, false, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +116,10 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 			msgSize := len(msg.Body)
 
 			data := Message{
-				protocol: c.protocol,
-				body:     make([]byte, msgSize),
+				protocol:      c.protocol,
+				body:          make([]byte, msgSize),
+				correlationID: msg.CorrelationId,
+				replyTo:       msg.ReplyTo,
 			}
 
 			n := copy(data.body, msg.Body[:])

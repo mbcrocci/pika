@@ -17,7 +17,7 @@ type Connector interface {
 	Publish(any, PublishOptions) error
 
 	RPCCall(string, any) (Message, error)
-	RPCRegister(RPCConsumer, ConsumerOptions) error
+	RPCRegister(string, string, RPCConsumer) error
 
 	WithContext(ctx context.Context) Connector
 	WithLogger(Logger) Connector

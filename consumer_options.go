@@ -9,6 +9,7 @@ type ConsumerOptions struct {
 	consumerName    string
 	durableQueue    bool
 	autoDeleteQueue bool
+	autoACK         bool
 
 	prefetch int // 0 -> unlimited
 
@@ -25,6 +26,7 @@ func NewConsumerOptions(exchange, topic, queue string) ConsumerOptions {
 	co.consumerName = ""
 	co.durableQueue = false
 	co.autoDeleteQueue = true
+	co.autoACK = false
 
 	return co
 }

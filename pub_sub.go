@@ -65,13 +65,13 @@ func (p *pubSub) Publish(data any, o PublishOptions) error {
 	return p.broadcast(k, data)
 }
 
-func (p *pubSub) RPCRegister(consumer RPCConsumer, o ConsumerOptions) error {
+func (p *pubSub) RPCRegister(exchange, queue string, consumer RPCConsumer) error {
 	//k := p.key(o.Exchange, o.Topic)
 	//p.subscribe(k, c)
 	return nil
 }
 
-func (p *pubSub) RPCCall(topic string, data any) (Message, error) {
+func (p *pubSub) RPCCall(queue string, data any) (Message, error) {
 	return Message{}, nil
 }
 

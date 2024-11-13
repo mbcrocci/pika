@@ -2,12 +2,18 @@ package pika
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+/// RPC using Direct Reply-to functionnality
+///
+/// The following underdocumented rules must be upheld:
+/// 1. The RPC call must use the same channel for sending  and receiving  the response.
+/// 2. The RPC server must use the same channel for receiving the call and sending the response
+/// 3. The RPC call must be sent to the server's queue directly
 
 // RPCConsumer is an interface for consumers that handle RPC requests using Direct Reply-to functionality
 type RPCConsumer interface {
@@ -27,7 +33,6 @@ type rpcReplyConsumer struct {
 }
 
 func (c rpcReplyConsumer) HandleMessage(ctx context.Context, msg Message) error {
-	log.Println("got reply", msg)
 	// only handle replies that match the correlationID
 	if msg.correlationID == c.ctx.correlationID {
 		c.ctx.replyQueue <- msg
@@ -52,7 +57,9 @@ func (c *rabbitConnector) newRPCContext() error {
 	// send message in a (go) channel for the RPCcall
 	opts := ConsumerOptions{
 		QueueName:    "amq.rabbitmq.reply-to",
-		consumerName: "rpc-reply-" + ctx.correlationID}
+		consumerName: "rpc-reply-" + ctx.correlationID,
+		autoACK:      true,
+	}
 
 	// setup consumer channel manually to avoid setting up the queue
 	ctx.channel.consuming = true
@@ -72,7 +79,7 @@ func (c *rabbitConnector) newRPCContext() error {
 
 	ctx.channel.delivery = msgs
 	c.conPool.Go(func() {
-		c.logger.Debug("consuming responses")
+		// Wait a bit to make sure the channel is ready to consume
 		time.Sleep(100 * time.Millisecond)
 		ctx.channel.Consume(rpcReplyConsumer{ctx}, opts)
 	})
@@ -83,7 +90,7 @@ func (c *rabbitConnector) newRPCContext() error {
 }
 
 // RPCCall makes a call to a RPC consumer
-func (c *rabbitConnector) RPCCall(topic string, msg any) (Message, error) {
+func (c *rabbitConnector) RPCCall(queue string, msg any) (Message, error) {
 	if c.rpc == nil {
 		if err := c.newRPCContext(); err != nil {
 			return Message{}, err
@@ -95,23 +102,11 @@ func (c *rabbitConnector) RPCCall(topic string, msg any) (Message, error) {
 		return Message{}, err
 	}
 
-	go func() {
-		r := make(chan amqp.Return)
-		rr := c.rpc.channel.channel.NotifyReturn(r)
-
-		select {
-		case ret1 := <-r:
-			c.logger.Debug("return 1", ret1)
-		case ret2 := <-rr:
-			c.logger.Debug("return 2", ret2)
-		}
-	}()
-
-	c.logger.Debug("sending rpc call", topic)
+	c.logger.Debug("sending rpc call", queue)
 	err = c.rpc.channel.channel.PublishWithContext(
 		c.ctx,
 		"",    // exchange
-		topic, // routing key
+		queue, // routing key that matches the queue name
 		false, // mandatory
 		false, // immediate
 		amqp.Publishing{
@@ -163,7 +158,6 @@ func (c rpcConsumerWrapper) HandleMessage(ctx context.Context, msg Message) erro
 		return err
 	}
 
-	c.channel.logger.Debug("replying to rpc call")
 	return c.channel.channel.PublishWithContext(
 		c.channel.ctx,
 		"", // on purpose
@@ -179,8 +173,8 @@ func (c rpcConsumerWrapper) HandleMessage(ctx context.Context, msg Message) erro
 }
 
 // RPCRegister registers a consumer to handle RPC requests
-func (c *rabbitConnector) RPCRegister(consumer RPCConsumer, opts ConsumerOptions) error {
-	c.logger.Debug("registering consumer")
+func (c *rabbitConnector) RPCRegister(exchange, queue string, consumer RPCConsumer) error {
+	opts := ConsumerOptions{Exchange: exchange, QueueName: queue}
 	channel, err := c.prepareConsumer(opts)
 	if err != nil {
 		return err

@@ -2,6 +2,7 @@ package pika_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/rabbitmq"
 )
+
+type Prefix string
+
+const PrefixKey Prefix = "prefix"
 
 type testLogger struct {
 	t      *testing.T
@@ -21,7 +26,7 @@ func (l testLogger) Warn(args ...any)  { l.t.Log("[warn]", l.prefix, args) }
 func (l testLogger) Error(args ...any) { l.t.Log("[error]", l.prefix, args) }
 
 func newPikaConnection(t *testing.T, ctx context.Context, url string) (pika.Connector, func()) {
-	prefix, ok := ctx.Value("prefix").(string)
+	prefix, ok := ctx.Value(PrefixKey).(string)
 	if !ok {
 		prefix = "[pika]"
 	}
@@ -94,43 +99,39 @@ func TestRPC(t *testing.T) {
 
 	t.Log("connecting to rabbitmq")
 
-	conn1, disconnect1 := newPikaConnection(t, ctx, url)
-	conn2, disconnect2 := newPikaConnection(t, ctx, url)
-	defer func() {
-		disconnect1()
-		disconnect2()
-		// wait a second to cleanup
-		time.Sleep(time.Second)
-	}()
+	conn1, _ := newPikaConnection(t, context.WithValue(ctx, PrefixKey, "[recv]"), url)
+	conn2, _ := newPikaConnection(t, context.WithValue(ctx, PrefixKey, "[call]"), url)
 
 	t.Log("pikas connected")
 
-	topic := "test.rpc"
+	queue := "test.rpc"
 
-	err = conn1.RPCRegister(testRPCConsumer{}, pika.NewConsumerOptions("test", topic, "some queue"))
+	err = conn1.RPCRegister("test", queue, testRPCConsumer{})
 	if err != nil {
 		t.Logf("unable to register consumer: %s", err)
 		t.FailNow()
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	// Wait a bit to make sure the consumer is ready
+	time.Sleep(100 * time.Millisecond)
 
-	result, err := conn2.RPCCall(topic, testRPCMessage{"some message", 1, 2})
-	if err != nil {
-		t.Logf("failed to call rpc: %s", err)
-		t.FailNow()
+	for i := 0; i < 10; i++ {
+		result, err := conn2.RPCCall(queue, testRPCMessage{fmt.Sprint("some message", i), i, i + 1})
+		if err != nil {
+			t.Logf("failed to call rpc: %s", err)
+			t.FailNow()
+		}
+
+		expected := testRPCMessage{fmt.Sprint("some message", i), i + 1, i + 2}
+		got := testRPCMessage{}
+		if err := result.Bind(&got); err != nil {
+			t.Logf("failed to bind result: %s", err)
+			t.FailNow()
+		}
+
+		if got != expected {
+			t.Logf("expected: %v, got: %v", expected, got)
+			t.FailNow()
+		}
 	}
-
-	expected := testRPCMessage{"some message", 2, 3}
-	got := testRPCMessage{}
-	if err := result.Bind(&got); err != nil {
-		t.Logf("failed to bind result: %s", err)
-		t.FailNow()
-	}
-
-	if got != expected {
-		t.Logf("expected: %v, got: %v", expected, got)
-		t.FailNow()
-	}
-
 }

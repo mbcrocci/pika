@@ -19,7 +19,7 @@ Features:
 
 If you need more features consider a mixed used of the library or simply an alternative.
 
-## Connectiong to RabbitMQ
+## Connecting to RabbitMQ
 
 To connect to RabbitMQ create a new `RabbitConnector`
 

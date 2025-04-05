@@ -1,6 +1,10 @@
 package pika
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/vmihailenco/msgpack/v5"
+)
 
 type Protocol interface {
 	ContentType() string
@@ -22,4 +26,16 @@ func (p JsonProtocol) Unmarshal(data []byte, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-// TODO ProtocolBuffers
+type MsgPackProtocol struct{}
+
+func (p MsgPackProtocol) ContentType() string {
+	return "application/x-msgpack"
+}
+
+func (p MsgPackProtocol) Marshal(v any) ([]byte, error) {
+	return msgpack.Marshal(v)
+}
+
+func (p MsgPackProtocol) Unmarshal(data []byte, v any) error {
+	return msgpack.Unmarshal(data, v)
+}

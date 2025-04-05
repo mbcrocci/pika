@@ -52,9 +52,7 @@ type testRPCMessage struct {
 	A, B    int
 }
 
-type testRPCConsumer struct{}
-
-func (c testRPCConsumer) HandleMessage(ctx context.Context, msg pika.Message) (any, error) {
+func testRPCConsumer(ctx context.Context, msg pika.Message) (any, error) {
 	var m testRPCMessage
 	if err := msg.Bind(&m); err != nil {
 		return pika.Message{}, err
@@ -106,7 +104,7 @@ func TestRPC(t *testing.T) {
 
 	queue := "test.rpc"
 
-	err = conn1.RPCRegister("test", queue, testRPCConsumer{})
+	err = conn1.RPCRegister("test", queue, testRPCConsumer)
 	if err != nil {
 		t.Logf("unable to register consumer: %s", err)
 		t.FailNow()
@@ -115,7 +113,7 @@ func TestRPC(t *testing.T) {
 	// Wait a bit to make sure the consumer is ready
 	time.Sleep(100 * time.Millisecond)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result, err := conn2.RPCCall(queue, testRPCMessage{fmt.Sprint("some message", i), i, i + 1})
 		if err != nil {
 			t.Logf("failed to call rpc: %s", err)

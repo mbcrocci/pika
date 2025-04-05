@@ -15,10 +15,8 @@ import (
 /// 2. The RPC server must use the same channel for receiving the call and sending the response
 /// 3. The RPC call must be sent to the server's queue directly
 
-// RPCConsumer is an interface for consumers that handle RPC requests using Direct Reply-to functionality
-type RPCConsumer interface {
-	HandleMessage(context.Context, Message) (any, error)
-}
+// RPCConsumer is a function that handles RPC requests using Direct Reply-to functionality
+type RPCConsumer func(context.Context, Message) (any, error)
 
 // RPCContext is a context for RPC calls
 type rpcContext struct {
@@ -81,7 +79,8 @@ func (c *rabbitConnector) newRPCContext() error {
 	c.conPool.Go(func() {
 		// Wait a bit to make sure the channel is ready to consume
 		time.Sleep(100 * time.Millisecond)
-		ctx.channel.Consume(rpcReplyConsumer{ctx}, opts)
+		consumer := rpcReplyConsumer{ctx}
+		ctx.channel.Consume(consumer.HandleMessage, opts)
 	})
 
 	c.rpc = ctx
@@ -148,7 +147,7 @@ type rpcConsumerWrapper struct {
 
 func (c rpcConsumerWrapper) HandleMessage(ctx context.Context, msg Message) error {
 	c.channel.logger.Debug("got rpc message")
-	reply, err := c.consumer.HandleMessage(ctx, msg)
+	reply, err := c.consumer(ctx, msg)
 	if err != nil {
 		return err
 	}
@@ -180,5 +179,5 @@ func (c *rabbitConnector) RPCRegister(exchange, queue string, consumer RPCConsum
 		return err
 	}
 	wrapper := rpcConsumerWrapper{consumer: consumer, channel: channel}
-	return c.consume(channel, wrapper, opts)
+	return c.consume(channel, wrapper.HandleMessage, opts)
 }

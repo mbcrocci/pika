@@ -49,8 +49,8 @@ func TestPubSub(t *testing.T) {
 	ca := &testPubsubConsumerA{}
 	cb := &testPubsubConsumerB{}
 
-	pubsub.Consume(ca, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicA"})
-	pubsub.Consume(cb, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicB"})
+	pubsub.Consume(ca.HandleMessage, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicA"})
+	pubsub.Consume(cb.HandleMessage, pika.ConsumerOptions{Exchange: "exchange", Topic: "topicB"})
 
 	pa := pika.PublishOptions{Exchange: "exchange", Topic: "topicA"}
 	pb := pika.PublishOptions{Exchange: "exchange", Topic: "topicB"}

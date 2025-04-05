@@ -96,7 +96,7 @@ func (p *pubSub) broadcast(k string, data any) error {
 	}
 
 	for _, c := range cs {
-		c.HandleMessage(context.TODO(), msg)
+		c(context.TODO(), msg)
 	}
 
 	return nil

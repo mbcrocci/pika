@@ -8,9 +8,7 @@ import (
 )
 
 // Consumer represents a RabbitMQ consumer for a typed `T` message
-type Consumer interface {
-	HandleMessage(context.Context, Message) error
-}
+type Consumer func(context.Context, Message) error
 
 // StartConsumer makes the necessary declarations and bindings to start a consumer.
 // It will spawn 2 goroutines to receive and process (with retries) messages.
@@ -130,7 +128,7 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 				c.logger.Warn("message size mismatch")
 			}
 
-			err := consumer.HandleMessage(ctx, data)
+			err := consumer(ctx, data)
 			if err != nil {
 				if opts.HasRetry() {
 					c.logger.Info("retrying message", err)
@@ -139,7 +137,7 @@ func (c *amqpChannel) Consume(consumer Consumer, opts ConsumerOptions) {
 						data := data
 
 						err := backoff.Retry(
-							func() error { return consumer.HandleMessage(ctx, data) },
+							func() error { return consumer(ctx, data) },
 							backoff.NewExponentialBackOff(),
 						)
 						if err != nil {

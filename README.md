@@ -4,33 +4,45 @@ A small RabbitMQ utility wrapper for go services
 It provides a simpler abstraction to ease setting up services that communicate with RabbitMQ.
 To keep simplicity it makes a few assumptions:
 - There is only need for `Topic Exchanges`
-- Message body contains JSON
-- A `Consumer` only receives a message type
+- Message body has a format (JSON by default)
+
+Features:
+- Consume messages from RabbitMQ
+- Publish messages to RabbitMQ
+- RPC calls using Direct Reply-to
+- PubSub using in-memory communication
+- Retry (in memory) for unhandled messages
+- Configurable logger
+- Configurable protocol (JSON by default)
+- Configurable concurrency
+- Maintains the connection and channels for you
 
 If you need more features consider a mixed used of the library or simply an alternative.
 
-## Connection
+## Connectiong to RabbitMQ
 
 To connect to RabbitMQ create a new `RabbitConnector`
 
 ```go
-func main() {
-  conn := pika.NewConnector()
-  err := conn.Connect(RABBIT_URL)
-  if err != nil {
-    // TODO
-  }
+// Create a connector with a background context and a logger
+conn := pika.NewRabbitConnector().
+  WithContext(context.Background()).
+  WithLogger(logger)
+
+// Connect and handle error if any
+if err := conn.Connect(cfg.Rabbit.URL); err != nil {
+  return err
 }
 ```
 
-This connection will be reused for each  Consumer, Publisher and Notifier (1 channel each).
+This connection will be reused for all consumers and publishers.
 
 If you have a more complex use-case you can still reuse the connection asking it for a new channel and setting up bindings yourself.
 ```go
-  channel, err := conn.Channel()
+channel, err := conn.Channel()
 ```
 
-## Consumer
+## Consuming messages
 
 To receive messages from RabbitMQ create a `Consumer` of the underlying event type.
 
@@ -40,93 +52,66 @@ type MsgEvent struct {
   Age  int    `json:"age"`
 }
 
-type MsgConsumer struct {}
 
-func (c MsgConsumer) Options() pika.ConsumerOptions {
-  // TODO
+func Consumer(ctx context.Context, msg pika.Message) error {
+  var event MsgEvent
+  if err := msg.Bind(&event); err != nil {
+    return err
+  }
+
+  // Do something with the event
 }
 
-func (c MsgConsumer) HandleMessage(e MsgEvent) error {
-  return nil
+// You can also use a method if you prefer
+
+type MsgConsumer struct{}
+
+func (c MsgConsumer) HandleMessage(ctx context.Context, msg pika.Message) error {
+  var event MsgEvent
+  if err := msg.Bind(&event); err != nil {
+    return err
+  }
+
+  // Do something with the event
 }
 ```
 
 Then start the consumer in you main file.
 ```go
-func main() {
-    // ...
 
-    err := pika.StartConsumer[MsgEvent](conn, MsgConsumer{})
-    if err != nil {
-        // TODO
-    }
-}
+conn.Consume(Consumer, pika.ConsumerOptions{...})
+
+c := Consumer{}
+conn.Consume(c.HandleMessage, pika.ConsumerOptions{...})
 ```
 
 ### Consumer Options
 
-The connector knows how to setup the connection based on the `ConsumerOptions` returned by the `Consumer`.
+The connector knows how to setup the connection based on the passed `ConsumerOptions` returned by the `Consumer`.
 At a minimum it needs an `exchange`, `topic` and `queue`.
 
 ```go
-func (c MsgConsumer) Options() pika.ConsumerOptions {
-  return pika.NewConsumerOptions(
-    "", // Exchange
-    "", // Topic / Routing-Key
-    "", // Queue name (leave empty for random name)
-  )
-}
+opts := pika.NewConsumerOptions("exchange", "topic", "queue").
+  SetDurable(). // The queue will persist and message will still be able to be queued up in RabbitMQ 
+  WithRetry(5, time.Second) // Setup a retry mechanism for messages. It will retry up to 5 time with exponential backoff. It will be done in memory instead of using a dead-letter exchange.
 ```
 
-To setup the queue to persist if the application crashes.
+## Publishing
+
+To publish messages all you need to do is call the `Publish` method on the `RabbitConnector`.
 ```go
-  return pika.NewConsumerOptions("", "", "").SetDurable()
-```
-This allows messages to queue-up and start consuming as soon as it starts
-
-You can also retry messages. It will be done in memory instead of using a dead-letter exchange.
-```go
-  return pika.NewConsumerOptions("", "", "").WithRetry(1, time.Second)
+conn.Publish(MsgEvent{}, pika.PublishOptions{"exchange", "topic"})
 ```
 
-## Publisher
-
-A publisher is a simple abstraction to conform the event type. It only holds a channel.
-```go
-publisher, err := pika.CreatePublisher[MsgEvent](conn, pika.PublisherOptions{
-  Exchange: "",
-  Topic: "",
-})
-
-// To use
-publisher.Publish(MsgEvent{})
-```
-
-## Notifier
-Sometimes you want to perform operations on regular intervals and them publish the result.
-
-```go
-type Notifier[T any] interface {
-	Options() NotificationOptions
-	Stop() bool
-	Notify() (T, error)
-}
-```
+Internally the connector will create a channel if it doesn't exist yet and bind the exchange and topic to the channel.
 
 ## PubSub
 If for testing or other use-cases you don't want to connect to a rabbitMq cluster,
 You can a PubSub which will handle all communication in memory.
 
 ```go
-func main() {
-    pubsub := pika.NewPubSub()
+pubsub := pika.NewPubSub()
 
-    publisher, _ := pika.CreatePublisher[MsgEvent](pubsub, PublisherOptions{"exchange", "topic"})
-    
-    pika.StartConsumer[MsgEvent](pubsub, YourConsumer{})
-
-    // ....
-}
+pubsub.Consume(YourConsumer, ConsumerOptions{"exchange", "topic"})
+pubsub.Publish(MsgEvent{}, PublisherOptions{"exchange", "topic"})
 ```
-
-As long as `YourConsumer` listens on the same exchange and topic it will receive every msg sent trough `publisher`.
